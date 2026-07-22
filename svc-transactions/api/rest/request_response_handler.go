@@ -42,6 +42,10 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity")
 			respondWithError(w, http.StatusBadRequest, "Deposit exceeds maximum wallet capacity")
 			return
+		} else if errors.Is(err, transactions.ErrInvalidPhoneNumber) {
+			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Invalid phone number")
+			respondWithError(w, http.StatusBadRequest, "Invalid phone number")
+			return
 		}
 		log.Error().Err(err).Msg("Failed to modify wallet balance")
 		respondWithError(w, http.StatusInternalServerError, "Internal server error")
@@ -88,6 +92,10 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 		} else if errors.Is(err, transactions.ErrInsufficientBalance) {
 			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Insufficient balance")
 			respondWithError(w, http.StatusBadRequest, "Insufficient balance")
+			return
+		} else if errors.Is(err, transactions.ErrInvalidPhoneNumber) {
+			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Invalid phone number")
+			respondWithError(w, http.StatusBadRequest, "Invalid phone number")
 			return
 		}
 		log.Error().Err(err).Msg("Failed to modify wallet balance")

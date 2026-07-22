@@ -96,5 +96,6 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		WalletID:      clientRes.WalletID,
 		Balance:       clientRes.Balance,
 		CreatedAt:     NewTransaction.CreatedAt,
+		Status:        string(StatusCompleted),
 	}, nil
 }

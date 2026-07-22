@@ -20,7 +20,7 @@ type httpClient struct {
 func NewWalletClient(baseURL string) transactions.WalletClient {
 	return &httpClient{
 		baseURL: baseURL,
-		client:  &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
+		client:  &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}, // need explaiantion
 	}
 
 }
@@ -60,5 +60,19 @@ func (c *httpClient) ModifyBalance(ctx context.Context, walletReq *transactions.
 	if err := json.NewDecoder(res.Body).Decode(&errorResponse); err != nil {
 		return nil, fmt.Errorf("failed to decode error response: %w", err)
 	}
-	return nil, fmt.Errorf("failed to modify balance: %s", errorResponse.Error)
+
+	// Map the exact string returned by the wallet service back to the domain errors
+	switch errorResponse.Error {
+	case "wallet not found":
+		return nil, transactions.ErrWalletNotFound
+	case "invalid phone number format":
+		return nil, transactions.ErrInvalidPhoneNumber
+	case "insufficient balance for the requested operation":
+		return nil, transactions.ErrInsufficientBalance
+	case "deposit exceeds maximum wallet capacity":
+		return nil, transactions.ErrExceedsMaxBalance
+	default:
+		// Fallback for any unknown errors
+		return nil, fmt.Errorf("wallet service error: %s", errorResponse.Error)
+	}
 }
