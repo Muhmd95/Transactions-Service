@@ -50,11 +50,11 @@ func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transacti
 	filter := bson.M{"_id": transactionID}
 	// update the status field
 	setUpdate := bson.M{
-		"status":    status,
-		"updatedAt": time.Now(),
+		"status":     status,
+		"updated_at": time.Now(),
 	}
 	if failedReason != "" {
-		setUpdate["failedReason"] = failedReason
+		setUpdate["failed_reason"] = failedReason
 	}
 
 	update := bson.M{"$set": setUpdate}

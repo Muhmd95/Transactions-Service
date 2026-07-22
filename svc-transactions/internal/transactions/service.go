@@ -56,6 +56,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		WalletID:      clientRes.WalletID,
 		Balance:       clientRes.Balance,
 		CreatedAt:     NewTransaction.CreatedAt,
+		Status:        string(StatusCompleted),
 	}, nil
 }
 

@@ -102,8 +102,6 @@ func main() {
 		Handler: mux,
 	}
 
-	logger.Log.Info().Str("port", port).Msg("Server is listening")
-
 	// ListenAndServe blocks forever unless it crashes
 	//if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 	//logger.Log.Fatal().Err(err).Msg("Server crashed")
