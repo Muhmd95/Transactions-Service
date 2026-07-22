@@ -3,6 +3,7 @@ module svc-transactions
 go 1.25.0
 
 require (
+	github.com/joho/godotenv v1.5.1
 	github.com/rs/zerolog v1.35.1
 	go.mongodb.org/mongo-driver v1.17.9
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0

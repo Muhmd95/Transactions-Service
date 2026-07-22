@@ -31,7 +31,7 @@ func (c *httpClient) ModifyBalance(ctx context.Context, walletReq *transactions.
 		return nil, fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/wallet/balance", c.baseURL)
+	url := fmt.Sprintf("%s/v1/wallet/balance", c.baseURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
