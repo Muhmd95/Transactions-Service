@@ -28,14 +28,14 @@ type Transaction struct {
 	//referece id is a string to prevent idempotency
 	//ReferenceID string `bson:"reference_id"`
 
-	SenderPhone   string `bson:"sender_phone"`
-	ReceiverPhone string `bson:"receiver_phone"`
+	SenderPhone   string `bson:"sender_phone,omitEmpty"`
+	ReceiverPhone string `bson:"receiver_phone,omitEmpty"`
 
 	Type   TransactionType   `bson:"type"`
 	Status TransactionStatus `bson:"status"`
 
-	Amount       int64  `bson:"amount"`
-	CurrencyCode string `bson:"currency_code"`
+	Amount int64 `bson:"amount"`
+	//CurrencyCode string `bson:"currency_code"`
 
 	FailedReason string    `bson:"failed_reason,omitempty"`
 	CreatedAt    time.Time `bson:"created_at"`
@@ -53,5 +53,6 @@ var (
 	ErrInsufficientBalance = errors.New("insufficient balance for the requested operation")
 	ErrExceedsMaxBalance   = errors.New("deposit exceeds maximum wallet capacity")
 	// errors related  to transaction
-	ErrDuplicateReferenceID = errors.New("transaction with the same reference ID already exists")
+	//ErrDuplicateReferenceID   = errors.New("transaction with the same reference ID already exists")
+	ErrInvalidTransactionType = errors.New("invalid transaction type")
 )

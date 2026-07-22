@@ -19,6 +19,7 @@ type WithdrawalRequest struct {
 
 type DepositResponse struct {
 	TransactionID primitive.ObjectID `json:"transaction_id"`
+	WalletID      string             `json:"wallet_id"`
 	//ReferenceID   string             `json:"reference_id"`
 	Status  string `json:"status"`
 	Balance int64  `json:"balance"`
@@ -28,6 +29,7 @@ type DepositResponse struct {
 
 type WithdrawalResponse struct {
 	TransactionID primitive.ObjectID `json:"transaction_id"`
+	WalletID      string             `json:"wallet_id"`
 	//ReferenceID   string             `json:"reference_id"`
 	Status  string `json:"status"`
 	Balance int64  `json:"balance"`
