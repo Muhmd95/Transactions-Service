@@ -1,0 +1,150 @@
+basePath: /v1
+definitions:
+  transactions.DepositRequest:
+    properties:
+      amount:
+        type: integer
+      phone_number:
+        description: ReferenceID string `json:"reference_id"`
+        type: string
+    type: object
+  transactions.DepositResponse:
+    properties:
+      balance:
+        type: integer
+      created_at:
+        type: string
+      status:
+        description: ReferenceID   string             `json:"reference_id"`
+        type: string
+      transaction_id:
+        type: string
+      wallet_id:
+        type: string
+    type: object
+  transactions.WithdrawalRequest:
+    properties:
+      amount:
+        type: integer
+      phone_number:
+        description: ReferenceID string `json:"reference_id"`
+        type: string
+    type: object
+  transactions.WithdrawalResponse:
+    properties:
+      balance:
+        type: integer
+      created_at:
+        type: string
+      status:
+        description: ReferenceID   string             `json:"reference_id"`
+        type: string
+      transaction_id:
+        type: string
+      wallet_id:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: This microservice handles financial transactions.
+  title: Transactions Service API
+  version: "1.0"
+paths:
+  /transactions/deposit:
+    post:
+      consumes:
+      - application/json
+      description: Validates the incoming payload, checks wallet constraints, and
+        credits the wallet balance.
+      parameters:
+      - description: Deposit Request Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/transactions.DepositRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successful deposit response
+          schema:
+            $ref: '#/definitions/transactions.DepositResponse'
+        "400":
+          description: Bad Request (Invalid payload, insufficient balance, capacity
+            limit, or phone number)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Wallet Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Process a deposit transaction
+      tags:
+      - Transactions
+  /transactions/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Validates the incoming payload, checks wallet balance, and debits
+        the wallet balance.
+      parameters:
+      - description: Withdrawal Request Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/transactions.WithdrawalRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successful withdrawal response
+          schema:
+            $ref: '#/definitions/transactions.WithdrawalResponse'
+        "400":
+          description: Bad Request (Invalid payload, insufficient balance, or phone
+            number)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Wallet Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Process a withdrawal transaction
+      tags:
+      - Transactions
+swagger: "2.0"

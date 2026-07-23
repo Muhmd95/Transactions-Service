@@ -10,6 +10,19 @@ import (
 	"svc-transactions/util/logger"
 )
 
+// DepositHandler handles processing deposit transactions.
+// @Summary      Process a deposit transaction
+// @Description  Validates the incoming payload, checks wallet constraints, and credits the wallet balance.
+// @Tags         Transactions
+// @Accept       json
+// @Produce      json
+// @Param        request  body      transactions.DepositRequest  true  "Deposit Request Payload"
+// @Success      200      {object}  transactions.DepositResponse "Successful deposit response"
+// @Failure      400      {object}  map[string]string            "Bad Request (Invalid payload, insufficient balance, capacity limit, or phone number)"
+// @Failure      404      {object}  map[string]string            "Wallet Not Found"
+// @Failure      405      {object}  map[string]string            "Method Not Allowed"
+// @Failure      500      {object}  map[string]string            "Internal Server Error"
+// @Router       /transactions/deposit [post]
 func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx := r.Context()
@@ -65,6 +78,19 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 
 }
 
+// WithdrawHandler handles processing withdrawal transactions.
+// @Summary      Process a withdrawal transaction
+// @Description  Validates the incoming payload, checks wallet balance, and debits the wallet balance.
+// @Tags         Transactions
+// @Accept       json
+// @Produce      json
+// @Param        request  body      transactions.WithdrawalRequest  true  "Withdrawal Request Payload"
+// @Success      200      {object}  transactions.WithdrawalResponse "Successful withdrawal response"
+// @Failure      400      {object}  map[string]string               "Bad Request (Invalid payload, insufficient balance, or phone number)"
+// @Failure      404      {object}  map[string]string               "Wallet Not Found"
+// @Failure      405      {object}  map[string]string               "Method Not Allowed"
+// @Failure      500      {object}  map[string]string               "Internal Server Error"
+// @Router       /transactions/withdraw [post]
 func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	ctx := r.Context()
