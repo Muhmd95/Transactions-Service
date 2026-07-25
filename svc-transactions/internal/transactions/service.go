@@ -3,6 +3,7 @@ package transactions
 import (
 	"context"
 	"time"
+	"svc-transactions/util/logger"
 )
 
 // this is the rules of the wallet client the service will use
@@ -22,6 +23,7 @@ func NewService(repo Repository, walletClient WalletClient) *Service {
 
 func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequest) (*DepositResponse, error) {
 
+	log := logger.Ctx(ctx)
 	NewTransaction := &Transaction{
 		Type:          TypeDeposit,
 		ReceiverPhone: req.PhoneNumber,
@@ -32,7 +34,6 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 	}
 
 	if err := s.repo.CreateTransaction(ctx, NewTransaction); err != nil {
-		// i dont know what to do with this error yet
 		return nil, err
 	}
 
@@ -44,6 +45,15 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 	clientRes, err := s.walletClient.ModifyBalance(ctx, clientReq)
 	if err != nil {
 		// update the transaction to failed
+		if err == ErrWalletNotFound {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Wallet not found (service layer)")
+		} else if err == ErrInsufficientBalance {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insufficient balance (service layer)")
+		} else if err == ErrExceedsMaxBalance {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
+		} else if err == ErrInvalidPhoneNumber {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
+		}
 		s.repo.UpdateTransactionStatus(ctx, NewTransaction.ID, StatusFailed, err.Error())
 		// i dont know what to do with this error yet
 		return nil, err
@@ -62,6 +72,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 
 func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *WithdrawalRequest) (*WithdrawalResponse, error) {
 
+	log := logger.Ctx(ctx)
 	NewTransaction := &Transaction{
 		Type:        TypeWithdrawal,
 		SenderPhone: req.PhoneNumber,
@@ -72,7 +83,6 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	}
 
 	if err := s.repo.CreateTransaction(ctx, NewTransaction); err != nil {
-		// i dont know what to do with this error yet
 		return nil, err
 	}
 
@@ -84,6 +94,15 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	clientRes, err := s.walletClient.ModifyBalance(ctx, clientReq)
 	if err != nil {
 		// update the transaction to failed
+		if err == ErrWalletNotFound {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Wallet not found (service layer)")
+		} else if err == ErrInsufficientBalance {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insufficient balance (service layer)")
+		} else if err == ErrExceedsMaxBalance {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
+		} else if err == ErrInvalidPhoneNumber {
+			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
+		}
 		s.repo.UpdateTransactionStatus(ctx, NewTransaction.ID, StatusFailed, err.Error())
 		// i dont know what to do with this error yet
 		return nil, err

@@ -10,6 +10,7 @@ import (
 
 	//project imports
 	"svc-transactions/internal/transactions"
+	"svc-transactions/util/logger"
 )
 
 type mongoRepository struct {
@@ -33,11 +34,14 @@ func NewTransactionRepository(ctx context.Context, db *mongo.Database) (transact
 
 func (r *mongoRepository) CreateTransaction(ctx context.Context, transaction *transactions.Transaction) error {
 
+	log := logger.Ctx(ctx)
+
 	result, err := r.collection.InsertOne(ctx, transaction)
 	if err != nil {
 		//if mongo.IsDuplicateKeyError(err) {
 		//return transactions.ErrDuplicateReferenceID
 		//}
+		log.Error().Err(err).Msg("Failed to insert transaction (from repo layer)")
 		return err
 	}
 	transaction.ID = result.InsertedID.(primitive.ObjectID)
@@ -46,6 +50,7 @@ func (r *mongoRepository) CreateTransaction(ctx context.Context, transaction *tr
 }
 
 func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transactionID primitive.ObjectID, status transactions.TransactionStatus, failedReason string) error {
+	log := logger.Ctx(ctx)
 	// apllied filter
 	filter := bson.M{"_id": transactionID}
 	// update the status field
@@ -61,6 +66,7 @@ func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transacti
 
 	_, err := r.collection.UpdateOne(ctx, filter, update)
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to update the transaction status (from repo layer)")
 		return err
 	}
 	return nil

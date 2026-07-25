@@ -14,7 +14,7 @@
 
 #this will be temporary container that will be used to build the binary and then throw away
 # STAGE 1: Build the binary
-FROM golang:1.25.0-alpine AS builder
+FROM golang:1.26.5-alpine AS builder
 # this downloads a linux system called alpines that has goland in it
 
 WORKDIR /app

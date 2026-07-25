@@ -38,7 +38,7 @@ func main() {
 
 	// loading the .ENV
 	if err := godotenv.Load(".ENV"); err != nil {
-		logger.Log.Error().Err(err).Msg("Error loading the .ENV file")
+		logger.Log.Info().Msg("No .ENV file found, relying on os environment")
 	}
 
 	// connect the port

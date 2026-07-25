@@ -41,26 +41,23 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	if reqData.Amount <= 0 {
+		log.Warn().Msg("Deposit amount must be greater than zero")
+		respondWithError(w, http.StatusBadRequest, "Deposit amount must be greater than zero")
+		return
+	}
+
+	log.Info().Str("phone_number", reqData.PhoneNumber).Msg("Processing deposit transaction request")
+
 	depositRes, err := c.service.CreateDepositTransaction(ctx, &reqData)
 	if err != nil {
 		if errors.Is(err, transactions.ErrWalletNotFound) {
-			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Wallet not found")
 			respondWithError(w, http.StatusNotFound, "Wallet not found")
 			return
-		} else if errors.Is(err, transactions.ErrInsufficientBalance) {
-			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Insufficient balance")
-			respondWithError(w, http.StatusBadRequest, "Insufficient balance")
-			return
-		} else if errors.Is(err, transactions.ErrExceedsMaxBalance) {
-			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity")
-			respondWithError(w, http.StatusBadRequest, "Deposit exceeds maximum wallet capacity")
-			return
-		} else if errors.Is(err, transactions.ErrInvalidPhoneNumber) {
-			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Invalid phone number")
-			respondWithError(w, http.StatusBadRequest, "Invalid phone number")
+		} else if errors.Is(err, transactions.ErrInsufficientBalance) || errors.Is(err, transactions.ErrExceedsMaxBalance) || errors.Is(err, transactions.ErrInvalidPhoneNumber) {
+			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		log.Error().Err(err).Msg("Failed to modify wallet balance")
 		respondWithError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
@@ -109,22 +106,24 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if reqData.Amount <= 0 {
+		log.Warn().Msg("Withdrawal amount must be greater than zero")
+		respondWithError(w, http.StatusBadRequest, "Withdrawal amount must be greater than zero")
+		return
+	}
+
+	log.Info().Str("phone_number", reqData.PhoneNumber).Msg("Processing withdrawal transaction request")
+
 	withdrawRes, err := c.service.CreateWithdrawalTransaction(ctx, &reqData)
 	if err != nil {
 		if errors.Is(err, transactions.ErrWalletNotFound) {
 			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Wallet not found")
 			respondWithError(w, http.StatusNotFound, "Wallet not found")
 			return
-		} else if errors.Is(err, transactions.ErrInsufficientBalance) {
-			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Insufficient balance")
-			respondWithError(w, http.StatusBadRequest, "Insufficient balance")
-			return
-		} else if errors.Is(err, transactions.ErrInvalidPhoneNumber) {
-			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Invalid phone number")
-			respondWithError(w, http.StatusBadRequest, "Invalid phone number")
+		} else if errors.Is(err, transactions.ErrInsufficientBalance) || errors.Is(err, transactions.ErrInvalidPhoneNumber) {
+			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		log.Error().Err(err).Msg("Failed to modify wallet balance")
 		respondWithError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}

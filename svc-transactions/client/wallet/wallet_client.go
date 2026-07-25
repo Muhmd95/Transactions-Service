@@ -10,6 +10,7 @@ import (
 	"svc-transactions/internal/transactions"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"svc-transactions/util/logger"
 )
 
 type httpClient struct {
@@ -26,20 +27,23 @@ func NewWalletClient(baseURL string) transactions.WalletClient {
 }
 
 func (c *httpClient) ModifyBalance(ctx context.Context, walletReq *transactions.WalletModifyBalanceRequest) (*transactions.WalletModifyBalanceResponse, error) {
-
+	log := logger.Ctx(ctx)
 	bodyBytes, err := json.Marshal(walletReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+		log.Error().Err(err).Msg("Failed to marshal wallet request (from wallet client)")
+		return nil, err
 	}
 
 	url := fmt.Sprintf("%s/v1/wallet/balance", c.baseURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		log.Error().Err(err).Msg("Failed to create HTTP request (from wallet client)")
+		return nil, err
 	}
 
 	res, err := c.client.Do(req)
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to send request (from wallet client)")
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer res.Body.Close()
@@ -47,8 +51,10 @@ func (c *httpClient) ModifyBalance(ctx context.Context, walletReq *transactions.
 	if res.StatusCode == http.StatusOK {
 		var successResponse transactions.WalletModifyBalanceResponse
 		if err := json.NewDecoder(res.Body).Decode(&successResponse); err != nil {
-			return nil, fmt.Errorf("failed to decode success response: %w", err)
+			log.Error().Err(err).Msg("Failed to decode success response (from wallet client)")
+			return nil, err
 		}
+		log.Info().Msg("Successfully modified wallet balance (from wallet client)")
 		return &transactions.WalletModifyBalanceResponse{
 			WalletID:  successResponse.WalletID,
 			Balance:   successResponse.Balance,
@@ -58,7 +64,8 @@ func (c *httpClient) ModifyBalance(ctx context.Context, walletReq *transactions.
 
 	var errorResponse transactions.WalletErrorResponse
 	if err := json.NewDecoder(res.Body).Decode(&errorResponse); err != nil {
-		return nil, fmt.Errorf("failed to decode error response: %w", err)
+		log.Error().Err(err).Msg("Failed to decode error response (from wallet client)")
+		return nil, err
 	}
 
 	// Map the exact string returned by the wallet service back to the domain errors
