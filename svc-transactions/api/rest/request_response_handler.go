@@ -17,7 +17,7 @@ import (
 // @Accept       json
 // @Produce      json
 // @Param        request  body      transactions.DepositRequest  true  "Deposit Request Payload"
-// @Success      200      {object}  transactions.DepositResponse "Successful deposit response"
+// @Success      201      {object}  transactions.DepositResponse "Deposit transaction successful & created"
 // @Failure      400      {object}  map[string]string            "Bad Request (Invalid payload, insufficient balance, capacity limit, or phone number)"
 // @Failure      404      {object}  map[string]string            "Wallet Not Found"
 // @Failure      405      {object}  map[string]string            "Method Not Allowed"
@@ -62,14 +62,15 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(depositRes); err != nil {
-		log.Error().Err(err).Msg("Failed to encode response")
-		respondWithError(w, http.StatusInternalServerError, "Failed to encode response")
+	responseData, err := json.Marshal(depositRes)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to marshal response")
+		respondWithError(w, http.StatusInternalServerError, "Failed to marshal response")
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(responseData)
 
 	log.Info().Str("phone_number", reqData.PhoneNumber).Msg("Deposit transaction response sent successfully")
 
@@ -82,7 +83,7 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 // @Accept       json
 // @Produce      json
 // @Param        request  body      transactions.WithdrawalRequest  true  "Withdrawal Request Payload"
-// @Success      200      {object}  transactions.WithdrawalResponse "Successful withdrawal response"
+// @Success      201      {object}  transactions.WithdrawalResponse "withdrawal transaction successful & created"
 // @Failure      400      {object}  map[string]string               "Bad Request (Invalid payload, insufficient balance, or phone number)"
 // @Failure      404      {object}  map[string]string               "Wallet Not Found"
 // @Failure      405      {object}  map[string]string               "Method Not Allowed"
@@ -128,14 +129,15 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(withdrawRes); err != nil {
-		log.Error().Err(err).Msg("Failed to encode response")
-		respondWithError(w, http.StatusInternalServerError, "Failed to encode response")
+	responseData, err := json.Marshal(withdrawRes)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to marshal response")
+		respondWithError(w, http.StatusInternalServerError, "Failed to marshal response")
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(responseData)
 
 	log.Info().Str("phone_number", reqData.PhoneNumber).Msg("Withdraw transaction response sent successfully")
 

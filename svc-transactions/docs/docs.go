@@ -40,8 +40,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Successful deposit response",
+                    "201": {
+                        "description": "Deposit transaction successful \u0026 created",
                         "schema": {
                             "$ref": "#/definitions/transactions.DepositResponse"
                         }
@@ -110,8 +110,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Successful withdrawal response",
+                    "201": {
+                        "description": "withdrawal transaction successful \u0026 created",
                         "schema": {
                             "$ref": "#/definitions/transactions.WithdrawalResponse"
                         }
