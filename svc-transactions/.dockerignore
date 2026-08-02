@@ -1,0 +1,28 @@
+# Security: Never copy environment files
+.ENV
+.env
+*.env
+.env.*
+
+# Version Control: Huge directories that the container doesn't need
+.git
+.gitignore
+.github/
+
+# Go specific: Ignore local builds and downloaded modules
+bin/
+vendor/
+*.exe
+*.test
+*.out
+
+# Editor & OS files: Stop cache-busting from your IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Docker files: The container doesn't need its own instructions
+Dockerfile
+docker-compose.yml
