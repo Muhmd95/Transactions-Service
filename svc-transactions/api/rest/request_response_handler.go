@@ -8,6 +8,7 @@ import (
 	// paths from project root:
 	"svc-transactions/internal/transactions"
 	"svc-transactions/util/logger"
+	"svc-transactions/util/common"
 )
 
 // DepositHandler handles processing deposit transactions.
@@ -44,6 +45,13 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 	if reqData.Amount <= 0 {
 		log.Warn().Msg("Deposit amount must be greater than zero")
 		respondWithError(w, http.StatusBadRequest, "Deposit amount must be greater than zero")
+		return
+	}
+
+	// validate the phone number before talking to the wallet
+	if err := common.ValidatePhoneNumber(&reqData.PhoneNumber); err != nil {
+		log.Warn().Err(err).Str("phone_number", reqData.PhoneNumber).Msg("Invalid phone number format")
+		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
