@@ -1,0 +1,39 @@
+name: Transactions Service CI
+
+# 1. THE TRIGGER: Run on pushes and pull requests to the main branch
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # ==========================================
+  # JOB 1: CONTINUOUS INTEGRATION (Build & Test)
+  # ==========================================
+  ci:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./svc-transactions
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.5' # Update this if your go.mod uses a different version
+          cache: true        # Speeds up the pipeline by caching modules
+
+      - name: Download Dependencies
+        run: go mod download
+        
+      - name: Verify Code Compiles
+        run: go build -v ./... #this builds the whole project
+
+      - name: Run Tests
+        run: go test -v ./... #no test files for now
