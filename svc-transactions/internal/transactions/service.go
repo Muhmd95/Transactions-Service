@@ -9,7 +9,7 @@ import (
 // this is the rules of the wallet client the service will use
 // in the future if i changed the wallet client it should implement the same interface
 type WalletClient interface {
-	ModifyBalance(ctx context.Context, walletReq *WalletModifyBalanceRequest) (*WalletModifyBalanceResponse, error)
+	WalletModifyBalance(context.Context, *WalletModifyBalanceRequest) (*WalletModifyBalanceResponse, error)
 }
 
 type Service struct {
@@ -42,7 +42,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		Amount:      req.Amount,
 	}
 
-	clientRes, err := s.walletClient.ModifyBalance(ctx, clientReq)
+	clientRes, err := s.walletClient.WalletModifyBalance(ctx, clientReq)
 	if err != nil {
 		// update the transaction to failed
 		if err == ErrWalletNotFound {
@@ -91,7 +91,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		Amount:      -req.Amount,
 	}
 
-	clientRes, err := s.walletClient.ModifyBalance(ctx, clientReq)
+	clientRes, err := s.walletClient.WalletModifyBalance(ctx, clientReq)
 	if err != nil {
 		// update the transaction to failed
 		if err == ErrWalletNotFound {

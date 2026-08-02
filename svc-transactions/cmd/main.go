@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+    "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
 	// project paths
 	"svc-transactions/api/rest"
@@ -22,7 +25,7 @@ import (
 func main() {
 	// inti the logger
 	logger.InitLogger("svc-transactions")
-	logger.Log.Info().Msg(("Starting svc-transactions"))
+	logger.Log.Info().Msg("Starting svc-transactions")
 
 	// init rhe tracer
 	tp, err := tracer.InitTracer("svc-transactions")
@@ -60,9 +63,9 @@ func main() {
 	}
 
 	// GET wallet client url
-	walletBaseURL := os.Getenv("WALLET_URL")
-	if walletBaseURL == "" {
-		walletBaseURL = "http://localhost:8000"
+	walletTarget := os.Getenv("WALLET_GRPC_URL")
+	if walletTarget == "" {
+		walletTarget = "localhost:50051"
 	}
 
 	mongoClient, err := mongodb.ConnectMongoDB(mongoURI)
@@ -86,7 +89,23 @@ func main() {
 		logger.Log.Fatal().Err(err).Msg("Failed to create transactions repository")
 	}
 	// init the client
-	walletClient := wallet.NewWalletClient(walletBaseURL)
+	conn, err := grpc.NewClient(
+		walletTarget,
+		// Use insecure credentials because it is internal connection
+		// it is just for this project to reduce cpu usage and complexity
+        grpc.WithTransportCredentials(insecure.NewCredentials()),
+
+		// this is the interceptor that will grab the trace id and inject it 
+		// to the context of any grpc outgoing request
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		logger.Log.Fatal().Err(err).Msg("Failed to connect to WalletService")
+	}
+	defer conn.Close()
+
+	walletClient := wallet.NewWalletClient(conn)
+	//walletClient := wallet.NewWalletClient(walletBaseURL)
 	// init the service
 	service := transactions.NewService(transactionsRepo, walletClient)
 	// init the controller
