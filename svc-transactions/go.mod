@@ -3,7 +3,7 @@ module svc-transactions
 go 1.26.5
 
 require (
-	github.com/Muhmd95/Contracts v0.0.0-20260730133847-ecd46568bf83
+	github.com/Muhmd95/Contracts v0.0.0-20260805101920-41b3fc0a7c62
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/zerolog v1.35.1
 	github.com/swaggo/http-swagger v1.3.4
