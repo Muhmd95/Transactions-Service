@@ -35,6 +35,12 @@ type Transaction struct {
 	Status TransactionStatus `bson:"status"`
 
 	Amount int64 `bson:"amount"`
+
+	//data of the wallet
+	// WalletID string `bson:"wallet_id"`
+	// BalanceBefore int64  `bson:"balance_before"`
+	// BalanceAfter int64 	`bson:"balance_after"`
+	
 	//CurrencyCode string `bson:"currency_code"`
 
 	FailedReason string    `bson:"failed_reason,omitempty"`
