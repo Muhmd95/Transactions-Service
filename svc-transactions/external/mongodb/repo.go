@@ -2,11 +2,12 @@ package mongodb
 
 import (
 	"context"
-	"time"
+	"errors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	//project imports
 	"svc-transactions/internal/transactions"
@@ -19,6 +20,21 @@ type mongoRepository struct {
 
 func NewTransactionRepository(ctx context.Context, db *mongo.Database) (transactions.Repository, error) {
 	coll := db.Collection("transactions")
+	log := logger.Ctx(ctx)
+
+	// create a compound index of phone number and the sequence number
+	_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{ // compound index, bson.D is for the order doc -> phone number then the sequence
+			{Key: "phone_number", Value: 1},
+			{Key: "sequence_number", Value: -1},
+
+		},
+		Options: options.Index().SetUnique(true).SetName("unique_wallet_sequence"),
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create the unique sequence index (from repo layer)")
+		return nil, err
+	}
 
 	// config the database by the reference id to create idempotency
 	//_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{ // creating an index on reference_, passing ctx to track the time
@@ -38,9 +54,9 @@ func (r *mongoRepository) CreateTransaction(ctx context.Context, transaction *tr
 
 	result, err := r.collection.InsertOne(ctx, transaction)
 	if err != nil {
-		//if mongo.IsDuplicateKeyError(err) {
-		//return transactions.ErrDuplicateReferenceID
-		//}
+		if mongo.IsDuplicateKeyError(err) {
+		return transactions.ErrDuplicateSequence
+		}
 		log.Error().Err(err).Msg("Failed to insert transaction (from repo layer)")
 		return err
 	}
@@ -49,26 +65,45 @@ func (r *mongoRepository) CreateTransaction(ctx context.Context, transaction *tr
 	return nil
 }
 
-func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transactionID primitive.ObjectID, status transactions.TransactionStatus, failedReason string) error {
-	log := logger.Ctx(ctx)
-	// apllied filter
-	filter := bson.M{"_id": transactionID}
-	// update the status field
-	setUpdate := bson.M{
-		"status":     status,
-		"updated_at": time.Now(),
-	}
-	if failedReason != "" {
-		setUpdate["failed_reason"] = failedReason
-	}
+func (r *mongoRepository) GetLatestTransaction(ctx context.Context, PhoneNumber string) (*transactions.Transaction, error) {
+	var latestTX transactions.Transaction
 
-	update := bson.M{"$set": setUpdate}
+	filter := bson.M{"phone_number": PhoneNumber}
 
-	_, err := r.collection.UpdateOne(ctx, filter, update)
+	option := options.FindOne().SetSort(bson.D{{Key: "sequence_number", Value: -1}})
+
+	err := r.collection.FindOne(ctx, filter, option).Decode(&latestTX)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to update the transaction status (from repo layer)")
-		return err
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, transactions.ErrFirstTransaction
+		}
+		return nil, err
 	}
-	return nil
-
+	return &latestTX, nil
 }
+
+
+
+// func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transactionID primitive.ObjectID, status transactions.TransactionStatus, failedReason string) error {
+// 	log := logger.Ctx(ctx)
+// 	// apllied filter
+// 	filter := bson.M{"_id": transactionID}
+// 	// update the status field
+// 	setUpdate := bson.M{
+// 		"status":     status,
+// 		"updated_at": time.Now(),
+// 	}
+// 	if failedReason != "" {
+// 		setUpdate["failed_reason"] = failedReason
+// 	}
+
+// 	update := bson.M{"$set": setUpdate}
+
+// 	_, err := r.collection.UpdateOne(ctx, filter, update)
+// 	if err != nil {
+// 		log.Error().Err(err).Msg("Failed to update the transaction status (from repo layer)")
+// 		return err
+// 	}
+// 	return nil
+
+// }

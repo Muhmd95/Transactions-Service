@@ -106,8 +106,10 @@ func main() {
 
 	walletClient := wallet.NewWalletClient(conn)
 	//walletClient := wallet.NewWalletClient(walletBaseURL)
+	// create the transactions manager
+	txManger := mongodb.NewTransactionsTxManager(mongoClient)
 	// init the service
-	service := transactions.NewService(transactionsRepo, walletClient)
+	service := transactions.NewService(transactionsRepo, walletClient, txManger)
 	// init the controller
 	controller := rest.NewTransactionsController(service)
 

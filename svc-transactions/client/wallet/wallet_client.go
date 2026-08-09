@@ -53,6 +53,8 @@ func (c *grpcClient) WalletModifyBalance(ctx context.Context, req *transactions.
 				return nil, transactions.ErrInsufficientBalance
 			} else if st.Message() == transactions.ErrExceedsMaxBalance.Error() {
 				return nil, transactions.ErrExceedsMaxBalance
+			} else {
+				return nil, err
 			}
 		case codes.Internal: 
 			log.Error().Err(err).Msg("Internal server error from WalletService (from grpc wallet client)")
@@ -69,6 +71,39 @@ func (c *grpcClient) WalletModifyBalance(ctx context.Context, req *transactions.
 		Balance:   clientRes.GetBalance(),
 		UpdatedAt: clientRes.GetUpdatedAt().AsTime(),
 	}, nil
+}
+
+func (g *grpcClient) GetWalletInfo(ctx context.Context, PhoneNumber string) (*transactions.GetWalletResponse, error) {
+	log := logger.Ctx(ctx)
+
+	walletReq := &walletv1.GetWalletRequest{
+		PhoneNumber: PhoneNumber,
+	}
+
+	log.Info().Msg("fetching the wallet info (grpc client)")
+
+	clientRes, err := g.client.GetWallet(ctx, walletReq)
+	if err != nil {
+		st, ok := status.FromError(err)
+		// ok will be true only if the error is from a grpc server
+		if !ok {
+			log.Error().Err(err).Msg("Failed to call GetWalletInfo (from grpc wallet client)")
+			return nil, fmt.Errorf("failed to call GetWalletInfo: %w", err)
+		}
+		
+		if st.Code() == codes.NotFound {
+			return nil, transactions.ErrWalletNotFound
+		}
+		log.Error().Err(err).Msg("Unexpected error from WalletService (from grpc wallet client)")
+		return nil, fmt.Errorf("unexpected error from WalletService: %w", err)
+
+	}
+
+	return &transactions.GetWalletResponse{
+		WalletID: clientRes.WalletId,
+		OwnerName: clientRes.OwnerName,
+	}, nil
+
 }
 
 

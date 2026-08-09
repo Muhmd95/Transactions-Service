@@ -53,3 +53,8 @@ type WalletModifyBalanceResponse struct {
 type WalletErrorResponse struct {
 	Error string `json:"error"`
 }
+
+type GetWalletResponse struct {
+	WalletID string
+	OwnerName string
+}

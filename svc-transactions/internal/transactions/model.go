@@ -17,8 +17,7 @@ const (
 type TransactionStatus string
 
 const (
-	StatusPending   TransactionStatus = "PENDING"
-	StatusCompleted TransactionStatus = "COMPLETED"
+	StatusCompleted TransactionStatus = "POSTED"
 	StatusFailed    TransactionStatus = "FAILED"
 )
 
@@ -27,8 +26,10 @@ type Transaction struct {
 
 	//referece id is a string to prevent idempotency
 	//ReferenceID string `bson:"reference_id"`
+	PhoneNumber string 	 `bson:"phone_number"`
 
-	SenderPhone   string `bson:"sender_phone,omitEmpty"`
+	// empty if the transaction is deposit or withdraw
+	SenderPhone   string `bson:"sender_phone,omitEmpty"` 
 	ReceiverPhone string `bson:"receiver_phone,omitEmpty"`
 
 	Type   TransactionType   `bson:"type"`
@@ -37,15 +38,15 @@ type Transaction struct {
 	Amount int64 `bson:"amount"`
 
 	//data of the wallet
-	// WalletID string `bson:"wallet_id"`
-	// BalanceBefore int64  `bson:"balance_before"`
-	// BalanceAfter int64 	`bson:"balance_after"`
+	WalletID      string `bson:"wallet_id"`
+	BalanceBefore int64  `bson:"balance_before"`
+	BalanceAfter  int64  `bson:"balance_after"`
+	SeqNumber     int64  `bson:"sequence_number"`
 	
 	//CurrencyCode string `bson:"currency_code"`
 
 	FailedReason string    `bson:"failed_reason,omitempty"`
 	CreatedAt    time.Time `bson:"created_at"`
-	UpdatedAt    time.Time `bson:"updated_at"`
 }
 
 // --- Domain Errors ---
@@ -61,4 +62,10 @@ var (
 	// errors related  to transaction
 	//ErrDuplicateReferenceID   = errors.New("transaction with the same reference ID already exists")
 	ErrInvalidTransactionType = errors.New("invalid transaction type")
+	ErrFirstTransaction = errors.New("first transaction insertion")
+	ErrDuplicateSequence = errors.New("duplicate sequence number")
 )
+
+// wallet max
+const WalletMax int64 = 9000000000000000
+
