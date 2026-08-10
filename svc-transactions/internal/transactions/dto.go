@@ -41,6 +41,7 @@ type WithdrawalResponse struct {
 type WalletModifyBalanceRequest struct {
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
+	RefID  		string 
 }
 
 type WalletModifyBalanceResponse struct {

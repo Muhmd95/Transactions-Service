@@ -125,6 +125,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 	clientReq := &WalletModifyBalanceRequest{
 		PhoneNumber: req.PhoneNumber,
 		Amount:      req.Amount,
+		RefID: NewTransaction.ID.Hex(),
 	}
 	// i dont know when to call this
 	_, err = s.walletClient.WalletModifyBalance(ctx, clientReq)
@@ -248,8 +249,9 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	}
 
 	clientReq := &WalletModifyBalanceRequest{
-		PhoneNumber: req.PhoneNumber,
-		Amount:      -req.Amount,
+		PhoneNumber: 	req.PhoneNumber,
+		Amount:      	-req.Amount,
+		RefID: 			NewTransaction.ID.Hex(),
 	}
 
 	_, err = s.walletClient.WalletModifyBalance(ctx, clientReq)

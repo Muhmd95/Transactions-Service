@@ -31,6 +31,7 @@ func (c *grpcClient) WalletModifyBalance(ctx context.Context, req *transactions.
 	walletReq := &walletv1.ModifyBalanceRequest{
 		PhoneNumber: req.PhoneNumber,
 		Amount:      req.Amount,
+		ReferenceID: req.RefID,
 	}
 
 	log.Info().Str("phone_number", walletReq.PhoneNumber).Int64("amount", walletReq.Amount).Msg("Sending ModifyBalance request to WalletService (from grpc wallet client)")
