@@ -2,9 +2,10 @@ package transactions
 
 import (
 	"context"
-	"time"
-	"svc-transactions/util/logger"
 	"errors"
+	"math/rand"
+	"svc-transactions/util/logger"
+	"time"
 )
 
 // this is the rules of the wallet client the service will use
@@ -25,7 +26,7 @@ func NewService(repo Repository, walletClient WalletClient, txManager TxManager)
 }
 
 func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequest) (*DepositResponse, error) {
-	maxRetries := 10
+	maxRetries := 100
 	log := logger.Ctx(ctx)
 	latestTX, err := s.repo.GetLatestTransaction(ctx, req.PhoneNumber)
 	if err != nil {
@@ -44,7 +45,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		if err != nil {
 			if errors.Is(err, ErrWalletNotFound) {
 				log.Error().Err(err).Msg("wallet not found (service layer)")
-			return nil, err
+				return nil, err
 			}
 			log.Error().Err(err).Msg("couldn't fetch the waallet")
 			return nil, err
@@ -61,43 +62,43 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 	var sent bool = false
 	for i := 0; i < maxRetries; i++ {
 		err = s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		latestTX, err := s.repo.GetLatestTransaction(txCtx, req.PhoneNumber)
-		if err != nil && !errors.Is(err, ErrFirstTransaction) {
+			latestTX, err := s.repo.GetLatestTransaction(txCtx, req.PhoneNumber)
+			if err != nil && !errors.Is(err, ErrFirstTransaction) {
+				return err
+			}
+
+			var newSeqNumber int64
+			var oldBalance int64
+
+			if latestTX == nil {
+				newSeqNumber = 1
+				oldBalance = 0
+			} else {
+				newSeqNumber = latestTX.SeqNumber + 1
+				oldBalance = latestTX.BalanceAfter
+			}
+
+			if oldBalance > WalletMax-req.Amount {
+				log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
+				return ErrExceedsMaxBalance
+			}
+			newBalance = oldBalance + req.Amount
+
+			NewTransaction = &Transaction{
+				Type:          TypeDeposit,
+				PhoneNumber:   req.PhoneNumber,
+				Amount:        req.Amount,
+				Status:        StatusCompleted,
+				WalletID:      walletID,
+				BalanceBefore: oldBalance,
+				BalanceAfter:  newBalance,
+				SeqNumber:     newSeqNumber,
+
+				CreatedAt: time.Now(),
+			}
+
+			err = s.repo.CreateTransaction(txCtx, NewTransaction)
 			return err
-		}
-
-		var newSeqNumber int64
-		var oldBalance int64
-		
-		if latestTX == nil {
-			newSeqNumber = 1
-			oldBalance = 0
-		} else {
-			newSeqNumber = latestTX.SeqNumber + 1
-			oldBalance = latestTX.BalanceAfter
-		}
-
-		if oldBalance > WalletMax - req.Amount {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
-			return ErrExceedsMaxBalance
-		}
-		newBalance = oldBalance + req.Amount
-
-		NewTransaction = &Transaction{
-			Type:        	TypeDeposit,
-			PhoneNumber: 	req.PhoneNumber,
-			Amount:      	req.Amount,
-			Status:      	StatusCompleted,
-			WalletID:    	walletID,
-			BalanceBefore: 	oldBalance,
-			BalanceAfter:  	newBalance,
-			SeqNumber:     	newSeqNumber,
-
-			CreatedAt:   	time.Now(),
-		}
-
-		err = s.repo.CreateTransaction(txCtx, NewTransaction)
-		return err
 		})
 
 		if err == nil {
@@ -108,9 +109,13 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		if errors.Is(err, ErrDuplicateSequence) {
 			// some other concurrent request add this transaction first
 			// try again and fetch the latest transaction
+			// sleep so dont collide at the same time
+			randomDelay := 5 + rand.Intn(96)
+			duration := time.Duration(randomDelay) * time.Millisecond
+			time.Sleep(duration)
 			continue
 		}
-			
+
 		return nil, err
 	}
 
@@ -119,13 +124,11 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		return nil, err
 	}
 
-
-
 	// i will handle calling the wallet later
 	clientReq := &WalletModifyBalanceRequest{
 		PhoneNumber: req.PhoneNumber,
 		Amount:      req.Amount,
-		RefID: NewTransaction.ID.Hex(),
+		RefID:       NewTransaction.ID.Hex(),
 	}
 	// i dont know when to call this
 	_, err = s.walletClient.WalletModifyBalance(ctx, clientReq)
@@ -150,11 +153,10 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		Status:        string(StatusCompleted),
 	}, nil
 
-	
 }
 
 func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *WithdrawalRequest) (*WithdrawalResponse, error) {
-	maxRetries := 10
+	maxRetries := 100
 	log := logger.Ctx(ctx)
 	latestTX, err := s.repo.GetLatestTransaction(ctx, req.PhoneNumber)
 	if err != nil {
@@ -173,7 +175,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		if err != nil {
 			if errors.Is(err, ErrWalletNotFound) {
 				log.Error().Err(err).Msg("wallet not found (service layer)")
-			return nil, err
+				return nil, err
 			}
 			log.Error().Err(err).Msg("couldn't fetch the wallet")
 			return nil, err
@@ -190,43 +192,43 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	var sent bool = false
 	for i := 0; i < maxRetries; i++ {
 		err = s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
-		latestTX, err := s.repo.GetLatestTransaction(txCtx, req.PhoneNumber)
-		if err != nil && !errors.Is(err, ErrFirstTransaction) {
+			latestTX, err := s.repo.GetLatestTransaction(txCtx, req.PhoneNumber)
+			if err != nil && !errors.Is(err, ErrFirstTransaction) {
+				return err
+			}
+
+			var newSeqNumber int64
+			var oldBalance int64
+
+			if latestTX == nil {
+				newSeqNumber = 1
+				oldBalance = 0
+			} else {
+				newSeqNumber = latestTX.SeqNumber + 1
+				oldBalance = latestTX.BalanceAfter
+			}
+
+			if oldBalance-req.Amount < 0 {
+				log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insuffienct balance for the withdraw (service layer)")
+				return ErrInsufficientBalance
+			}
+			newBalance = oldBalance - req.Amount
+
+			NewTransaction = &Transaction{
+				Type:          TypeWithdrawal,
+				PhoneNumber:   req.PhoneNumber,
+				Amount:        req.Amount,
+				Status:        StatusCompleted,
+				WalletID:      walletID,
+				BalanceBefore: oldBalance,
+				BalanceAfter:  newBalance,
+				SeqNumber:     newSeqNumber,
+
+				CreatedAt: time.Now(),
+			}
+
+			err = s.repo.CreateTransaction(txCtx, NewTransaction)
 			return err
-		}
-
-		var newSeqNumber int64
-		var oldBalance int64
-		
-		if latestTX == nil {
-			newSeqNumber = 1
-			oldBalance = 0
-		} else {
-			newSeqNumber = latestTX.SeqNumber + 1
-			oldBalance = latestTX.BalanceAfter
-		}
-
-		if oldBalance - req.Amount < 0 {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insuffienct balance for the withdraw (service layer)")
-			return ErrInsufficientBalance
-		}
-		newBalance = oldBalance - req.Amount
-
-		NewTransaction = &Transaction{
-			Type:        	TypeWithdrawal,
-			PhoneNumber: 	req.PhoneNumber,
-			Amount:      	req.Amount,
-			Status:      	StatusCompleted,
-			WalletID:    	walletID,
-			BalanceBefore: 	oldBalance,
-			BalanceAfter:  	newBalance,
-			SeqNumber:     	newSeqNumber,
-
-			CreatedAt:   	time.Now(),
-		}
-
-		err = s.repo.CreateTransaction(txCtx, NewTransaction)
-		return err
 		})
 
 		if err == nil {
@@ -237,9 +239,13 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		if errors.Is(err, ErrDuplicateSequence) {
 			// some other concurrent request add this transaction first
 			// try again and fetch the latest transaction
+			// sleep so dont collide at the same time
+			randomDelay := 5 + rand.Intn(96)
+			duration := time.Duration(randomDelay) * time.Millisecond
+			time.Sleep(duration)
 			continue
 		}
-			
+
 		return nil, err
 	}
 
@@ -249,9 +255,9 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	}
 
 	clientReq := &WalletModifyBalanceRequest{
-		PhoneNumber: 	req.PhoneNumber,
-		Amount:      	-req.Amount,
-		RefID: 			NewTransaction.ID.Hex(),
+		PhoneNumber: req.PhoneNumber,
+		Amount:      -req.Amount,
+		RefID:       NewTransaction.ID.Hex(),
 	}
 
 	_, err = s.walletClient.WalletModifyBalance(ctx, clientReq)

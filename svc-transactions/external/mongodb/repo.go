@@ -3,6 +3,7 @@ package mongodb
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -27,7 +28,6 @@ func NewTransactionRepository(ctx context.Context, db *mongo.Database) (transact
 		Keys: bson.D{ // compound index, bson.D is for the order doc -> phone number then the sequence
 			{Key: "phone_number", Value: 1},
 			{Key: "sequence_number", Value: -1},
-
 		},
 		Options: options.Index().SetUnique(true).SetName("unique_wallet_sequence"),
 	})
@@ -54,8 +54,8 @@ func (r *mongoRepository) CreateTransaction(ctx context.Context, transaction *tr
 
 	result, err := r.collection.InsertOne(ctx, transaction)
 	if err != nil {
-		if mongo.IsDuplicateKeyError(err) {
-		return transactions.ErrDuplicateSequence
+		if mongo.IsDuplicateKeyError(err) || strings.Contains(err.Error(), "WriteConflict") {
+			return transactions.ErrDuplicateSequence
 		}
 		log.Error().Err(err).Msg("Failed to insert transaction (from repo layer)")
 		return err
@@ -81,8 +81,6 @@ func (r *mongoRepository) GetLatestTransaction(ctx context.Context, PhoneNumber 
 	}
 	return &latestTX, nil
 }
-
-
 
 // func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transactionID primitive.ObjectID, status transactions.TransactionStatus, failedReason string) error {
 // 	log := logger.Ctx(ctx)
