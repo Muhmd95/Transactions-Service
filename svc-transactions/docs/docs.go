@@ -37,6 +37,13 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/transactions.DepositRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Unique key to prevent duplicate balance modifications",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -85,6 +92,101 @@ const docTemplate = `{
                 }
             }
         },
+        "/transactions/transfer": {
+            "post": {
+                "description": "Validates the incoming payload, checks sender balance, and atomically transfers funds from sender to receiver.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Transactions"
+                ],
+                "summary": "Process a transfer transaction",
+                "parameters": [
+                    {
+                        "description": "Transfer Request Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/transactions.TransferRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Unique key to prevent duplicate transfers",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Transfer transaction successful \u0026 created",
+                        "schema": {
+                            "$ref": "#/definitions/transactions.TransferResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request (Invalid payload, insufficient balance, or phone number)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Sender or Receiver Wallet Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity (Transfer failed due to receiver max capacity)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests (Concurrency throttle)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/transactions/withdraw": {
             "post": {
                 "description": "Validates the incoming payload, checks wallet balance, and debits the wallet balance.",
@@ -107,6 +209,13 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/transactions.WithdrawalRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Unique key to prevent duplicate balance modifications",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -166,6 +275,9 @@ const docTemplate = `{
                 "phone_number": {
                     "description": "ReferenceID string ` + "`" + `json:\"reference_id\"` + "`" + `",
                     "type": "string"
+                },
+                "reference_id": {
+                    "type": "string"
                 }
             }
         },
@@ -179,13 +291,50 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "ReferenceID   string             ` + "`" + `json:\"reference_id\"` + "`" + `",
                     "type": "string"
                 },
                 "transaction_id": {
                     "type": "string"
                 },
                 "wallet_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "transactions.TransferRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "receiver_phone": {
+                    "type": "string"
+                },
+                "reference_id": {
+                    "type": "string"
+                },
+                "sender_phone": {
+                    "description": "ReferenceID \tstring \t` + "`" + `json:\"reference_id\"` + "`" + `",
+                    "type": "string"
+                }
+            }
+        },
+        "transactions.TransferResponse": {
+            "type": "object",
+            "properties": {
+                "sender_balance": {
+                    "type": "integer"
+                },
+                "sender_balance_before": {
+                    "type": "integer"
+                },
+                "sender_wallet_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "transaction_id": {
                     "type": "string"
                 }
             }
@@ -198,6 +347,9 @@ const docTemplate = `{
                 },
                 "phone_number": {
                     "description": "ReferenceID string ` + "`" + `json:\"reference_id\"` + "`" + `",
+                    "type": "string"
+                },
+                "reference_id": {
                     "type": "string"
                 }
             }
@@ -212,7 +364,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "ReferenceID   string             ` + "`" + `json:\"reference_id\"` + "`" + `",
                     "type": "string"
                 },
                 "transaction_id": {

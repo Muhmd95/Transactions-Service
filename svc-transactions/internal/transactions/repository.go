@@ -10,5 +10,7 @@ type Repository interface {
 
 	GetLatestTransaction(ctx context.Context, PhoneNumber string) (*Transaction, error)
 
+	GetTransactionByReferenceID(ctx context.Context, referenceID string, optionalPhoneNNumber *string) (*Transaction, error)
+
 	
 }

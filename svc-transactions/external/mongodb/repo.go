@@ -37,14 +37,14 @@ func NewTransactionRepository(ctx context.Context, db *mongo.Database) (transact
 	}
 
 	// config the database by the reference id to create idempotency
-	//_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{ // creating an index on reference_, passing ctx to track the time
-	//Keys:    bson.M{"reference_id": 1},                                   // this is the index on the reference ID field, 1 means ascending order
-	//Options: options.Index().SetUnique(true).SetName("unique_reference"), // this is the name of the index and it is unique so
-	//that no two transactions can have the same reference ID
-	//})
-	//if err != nil {
-	//return nil, err
-	//}
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{ // creating an index on reference_, passing ctx to track the time
+	Keys:    bson.M{"reference_id": 1},                                   // this is the index on the reference ID field, 1 means ascending order
+	Options: options.Index().SetUnique(true).SetName("unique_reference"), // this is the name of the index and it is unique so
+	// that no two transactions can have the same reference ID
+	})
+	if err != nil {
+	return nil, err
+	}
 	return &mongoRepository{collection: coll}, nil
 }
 
@@ -54,8 +54,16 @@ func (r *mongoRepository) CreateTransaction(ctx context.Context, transaction *tr
 
 	result, err := r.collection.InsertOne(ctx, transaction)
 	if err != nil {
-		if mongo.IsDuplicateKeyError(err) || strings.Contains(err.Error(), "WriteConflict") {
-			return transactions.ErrDuplicateSequence
+		if mongo.IsDuplicateKeyError(err) {
+			if strings.Contains(err.Error(), "unique_reference") {
+				return transactions.ErrDuplicateReferenceID
+			}
+			if strings.Contains(err.Error(), "unique_wallet_sequence") {
+				return transactions.ErrDuplicateSequence
+			}
+		}
+		if strings.Contains(err.Error(), "WriteConflict") {
+			return transactions.ErrDuplicateSequence // to make the loop retry after a bit of time
 		}
 		log.Error().Err(err).Msg("Failed to insert transaction (from repo layer)")
 		return err
@@ -80,6 +88,25 @@ func (r *mongoRepository) GetLatestTransaction(ctx context.Context, PhoneNumber 
 		return nil, err
 	}
 	return &latestTX, nil
+}
+
+func (r *mongoRepository) GetTransactionByReferenceID(ctx context.Context, referenceID string, optionalPhoneNNumber *string) (*transactions.Transaction, error) {
+	var transaction transactions.Transaction
+
+	filter := bson.M{"reference_id": referenceID}
+
+	if optionalPhoneNNumber != nil {
+		filter["phone_number"] = *optionalPhoneNNumber
+	}
+
+	err := r.collection.FindOne(ctx, filter).Decode(&transaction)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, transactions.ErrTransactionNotFound
+		}
+		return nil, err
+	}
+	return &transaction, nil
 }
 
 // func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transactionID primitive.ObjectID, status transactions.TransactionStatus, failedReason string) error {

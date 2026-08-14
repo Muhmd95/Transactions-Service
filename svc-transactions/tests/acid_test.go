@@ -20,6 +20,7 @@ const (
 )
 
 var httpClient = &http.Client{Timeout: 120 * time.Second}
+var reqCounter int64
 
 func createWallet(t *testing.T, phone, name, nationalID string) string {
 	payload := map[string]interface{}{
@@ -81,13 +82,24 @@ func getWalletBalance(t *testing.T, phone string) int64 {
 
 	respBody, _ := io.ReadAll(resp.Body)
 	var data map[string]interface{}
-	json.Unmarshal(respBody, &data)
+	if err := json.Unmarshal(respBody, &data); err != nil {
+		t.Fatalf("Failed to unmarshal wallet response: %v", err)
+	}
 
-	balance, _ := data["balance"].(float64)
-	return int64(balance)
+	balanceVal, ok := data["balance"]
+	if !ok {
+		t.Fatalf("balance field missing from response: %s", string(respBody))
+	}
+	
+	balanceFloat, ok := balanceVal.(float64)
+	if !ok {
+		t.Fatalf("balance is not a number. Got type %T, value: %v", balanceVal, balanceVal)
+	}
+
+	return int64(balanceFloat)
 }
 
-func deposit(t *testing.T, phone string, amount int64) (int, map[string]interface{}) {
+func deposit(t *testing.T, phone string, amount int64, keys ...string) (int, map[string]interface{}) {
 	payload := map[string]interface{}{
 		"phone_number": phone,
 		"amount":       amount,
@@ -96,6 +108,12 @@ func deposit(t *testing.T, phone string, amount int64) (int, map[string]interfac
 
 	req, _ := http.NewRequest(http.MethodPost, TxSvcURL+"/v1/transactions/deposit", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+
+	idemKey := fmt.Sprintf("test-idem-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&reqCounter, 1))
+	if len(keys) > 0 {
+		idemKey = keys[0]
+	}
+	req.Header.Set("Idempotency-Key", idemKey)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -110,7 +128,7 @@ func deposit(t *testing.T, phone string, amount int64) (int, map[string]interfac
 	return resp.StatusCode, data
 }
 
-func withdraw(t *testing.T, phone string, amount int64) (int, map[string]interface{}) {
+func withdraw(t *testing.T, phone string, amount int64, keys ...string) (int, map[string]interface{}) {
 	payload := map[string]interface{}{
 		"phone_number": phone,
 		"amount":       amount,
@@ -119,6 +137,12 @@ func withdraw(t *testing.T, phone string, amount int64) (int, map[string]interfa
 
 	req, _ := http.NewRequest(http.MethodPost, TxSvcURL+"/v1/transactions/withdraw", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
+
+	idemKey := fmt.Sprintf("test-idem-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&reqCounter, 1))
+	if len(keys) > 0 {
+		idemKey = keys[0]
+	}
+	req.Header.Set("Idempotency-Key", idemKey)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -380,11 +404,80 @@ func TestDurability_IdempotencyOnWalletService(t *testing.T) {
 	t.Logf("Final balance: %d (Idempotency intact)", finalBal)
 }
 
+func TestDurability_IdempotencyOnTransactionService(t *testing.T) {
+	phone := "01012345678"
+	t.Logf("Testing idempotency directly on Transactions Service for wallet %s", phone)
+
+	initialBal := getWalletBalance(t, phone)
+	idempotencyKey := fmt.Sprintf("tx-idem-%d", time.Now().UnixNano())
+
+	// First request
+	status1, _ := deposit(t, phone, 300, idempotencyKey)
+	if status1 != http.StatusCreated && status1 != http.StatusOK {
+		t.Fatalf("First deposit failed with status %d", status1)
+	}
+
+	b1 := getWalletBalance(t, phone)
+	if b1 != initialBal+300 {
+		t.Errorf("Balance did not update on first deposit. Exp %d, got %d", initialBal+300, b1)
+	}
+
+	// Send exactly same request again with SAME idempotency key
+	status2, _ := deposit(t, phone, 300, idempotencyKey)
+	if status2 != http.StatusCreated && status2 != http.StatusOK {
+		t.Logf("Second deposit returned unexpected status %d", status2)
+	}
+
+	finalBal := getWalletBalance(t, phone)
+	if finalBal != b1 {
+		t.Errorf("Transactions Idempotency failed! Balance changed on duplicate request. Expected %d, got %d", b1, finalBal)
+	}
+	t.Logf("Final balance: %d (Transactions Idempotency intact)", finalBal)
+}
+
+func TestIsolation_ConcurrentIdempotentRequests(t *testing.T) {
+	phone := "01012345678"
+	t.Logf("Stress testing 20 concurrent identical idempotency requests for wallet %s", phone)
+
+	initialBal := getWalletBalance(t, phone)
+	idempotencyKey := fmt.Sprintf("tx-idem-concurrent-%d", time.Now().UnixNano())
+
+	var wg sync.WaitGroup
+	var successes, failures int32
+	concurrency := 20
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			status, _ := deposit(t, phone, 100, idempotencyKey)
+			if status == http.StatusCreated || status == http.StatusOK {
+				atomic.AddInt32(&successes, 1)
+			} else {
+				atomic.AddInt32(&failures, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	finalBal := getWalletBalance(t, phone)
+	expectedBal := initialBal + 100 // Only ONE of the 20 should have actually processed the math
+
+	t.Logf("Concurrent idempotency test done. Successes (200/201): %d, Failures: %d", successes, failures)
+	t.Logf("Final balance: %d. Expected balance: %d", finalBal, expectedBal)
+
+	if finalBal != expectedBal {
+		t.Errorf("Idempotency failure! Balance mismatch! Expected %d, got %d", expectedBal, finalBal)
+	}
+}
+
 func TestEdgeCase_WithdrawMoreThanBalance(t *testing.T) {
-	phone := "01512345678" // New wallet, balance 0
+	phone := "01512345678" // Wallet might have balance from previous runs
 	t.Logf("Testing withdraw > balance on wallet %s", phone)
 
-	status, data := withdraw(t, phone, 100)
+	currentBal := getWalletBalance(t, phone)
+
+	status, data := withdraw(t, phone, currentBal+100)
 	if status != http.StatusBadRequest && status != http.StatusUnprocessableEntity && status != http.StatusInternalServerError {
 		t.Errorf("Expected failure status (e.g. 400), got %d. Data: %v", status, data)
 	} else {
@@ -440,5 +533,287 @@ func TestHighConcurrency_50DepositsOnSameWallet(t *testing.T) {
 
 	if finalBal != expectedBal {
 		t.Errorf("Balance mismatch! Expected %d, got %d", expectedBal, finalBal)
+	}
+}
+
+func transfer(t *testing.T, senderPhone, receiverPhone string, amount int64, keys ...string) (int, map[string]interface{}) {
+	payload := map[string]interface{}{
+		"sender_phone":   senderPhone,
+		"receiver_phone": receiverPhone,
+		"amount":         amount,
+	}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, TxSvcURL+"/v1/transactions/transfer", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	idemKey := fmt.Sprintf("test-idem-transfer-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&reqCounter, 1))
+	if len(keys) > 0 {
+		idemKey = keys[0]
+	}
+	req.Header.Set("Idempotency-Key", idemKey)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to transfer: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var data map[string]interface{}
+	json.Unmarshal(respBody, &data)
+
+	return resp.StatusCode, data
+}
+
+// ============================================================================
+// Transfer Tests
+// ============================================================================
+
+func TestSetup_CreateTransferWallets(t *testing.T) {
+	t.Log("Setting up wallets for Transfer tests...")
+	createWallet(t, "01055555555", "Transfer Sender", "29905051234567")
+	createWallet(t, "01166666666", "Transfer Receiver", "29906061234567")
+
+	// Pre-fund the sender with enough balance for all transfer tests
+	status, _ := deposit(t, "01055555555", 50000)
+	if status != http.StatusCreated {
+		t.Fatalf("Failed to pre-fund sender. Got status: %d", status)
+	}
+	t.Log("Transfer wallets created and sender funded with 50000.")
+}
+
+func TestAtomicity_Transfer(t *testing.T) {
+	senderPhone := "01055555555"
+	receiverPhone := "01166666666"
+
+	initialSenderBal := getWalletBalance(t, senderPhone)
+	initialReceiverBal := getWalletBalance(t, receiverPhone)
+
+	status, data := transfer(t, senderPhone, receiverPhone, 500)
+	if status != http.StatusCreated {
+		t.Fatalf("Expected 201 Created for transfer, got %d. Response: %v", status, data)
+	}
+
+	finalSenderBal := getWalletBalance(t, senderPhone)
+	finalReceiverBal := getWalletBalance(t, receiverPhone)
+
+	if finalSenderBal != initialSenderBal-500 {
+		t.Errorf("Sender balance mismatch: Expected %d, got %d", initialSenderBal-500, finalSenderBal)
+	}
+	if finalReceiverBal != initialReceiverBal+500 {
+		t.Errorf("Receiver balance mismatch: Expected %d, got %d", initialReceiverBal+500, finalReceiverBal)
+	}
+	t.Logf("Sender: %d -> %d | Receiver: %d -> %d", initialSenderBal, finalSenderBal, initialReceiverBal, finalReceiverBal)
+}
+
+func TestConsistency_TransferInsufficientBalance(t *testing.T) {
+	senderPhone := "01055555555"
+	receiverPhone := "01166666666"
+
+	initialSenderBal := getWalletBalance(t, senderPhone)
+	initialReceiverBal := getWalletBalance(t, receiverPhone)
+
+	// Try to transfer more than the sender has
+	status, data := transfer(t, senderPhone, receiverPhone, initialSenderBal+1000)
+	if status == http.StatusCreated {
+		t.Fatalf("Transfer should have failed for insufficient balance, but got 201. Response: %v", data)
+	}
+	t.Logf("Correctly rejected with status %d: %v", status, data)
+
+	// Verify neither balance changed
+	finalSenderBal := getWalletBalance(t, senderPhone)
+	finalReceiverBal := getWalletBalance(t, receiverPhone)
+
+	if finalSenderBal != initialSenderBal {
+		t.Errorf("Sender balance should not change on failed transfer! Expected %d, got %d", initialSenderBal, finalSenderBal)
+	}
+	if finalReceiverBal != initialReceiverBal {
+		t.Errorf("Receiver balance should not change on failed transfer! Expected %d, got %d", initialReceiverBal, finalReceiverBal)
+	}
+}
+
+func TestConsistency_TransferMaxBalanceFails(t *testing.T) {
+	senderPhone := "01055555555"
+	receiverPhone := "01166666666"
+
+	// Top up receiver to max capacity
+	currentReceiverBal := getWalletBalance(t, receiverPhone)
+	amountToMax := int64(9000000000000000) - currentReceiverBal
+	if amountToMax > 0 {
+		status, _ := deposit(t, receiverPhone, amountToMax)
+		if status != http.StatusCreated {
+			t.Fatalf("Failed to top up receiver to max capacity! Got status: %d", status)
+		}
+	}
+
+	initialSenderBal := getWalletBalance(t, senderPhone)
+
+	// Attempt transfer that would push receiver over max
+	status, data := transfer(t, senderPhone, receiverPhone, 50)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("Expected 422, got %d. Response: %v", status, data)
+	}
+	t.Logf("Correctly rejected with status %d", status)
+
+	// Verify sender balance was NOT affected (atomic rollback)
+	finalSenderBal := getWalletBalance(t, senderPhone)
+	if finalSenderBal != initialSenderBal {
+		t.Errorf("Sender balance should not change on failed transfer! Expected %d, got %d", initialSenderBal, finalSenderBal)
+	}
+
+	// Reset receiver back down so future tests work
+	withdraw(t, receiverPhone, amountToMax)
+}
+
+func TestIsolation_ConcurrentTransfers(t *testing.T) {
+	senderPhone := "01055555555"
+	receiverPhone := "01166666666"
+
+	// Top up sender with extra funds for concurrent transfers
+	status, _ := deposit(t, senderPhone, 5000)
+	if status != http.StatusCreated {
+		t.Fatalf("Failed to top up sender for concurrent test. Got status: %d", status)
+	}
+
+	initialSenderBal := getWalletBalance(t, senderPhone)
+	initialReceiverBal := getWalletBalance(t, receiverPhone)
+
+	var wg sync.WaitGroup
+	concurrency := 20
+	var successes, failures int32
+
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s, _ := transfer(t, senderPhone, receiverPhone, 50)
+			if s == http.StatusCreated {
+				atomic.AddInt32(&successes, 1)
+			} else {
+				atomic.AddInt32(&failures, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	finalSenderBal := getWalletBalance(t, senderPhone)
+	finalReceiverBal := getWalletBalance(t, receiverPhone)
+
+	expectedSenderBal := initialSenderBal - int64(successes)*50
+	expectedReceiverBal := initialReceiverBal + int64(successes)*50
+
+	t.Logf("Concurrent transfers done. Successes: %d, Failures: %d", successes, failures)
+	t.Logf("Sender: %d -> %d (expected %d) | Receiver: %d -> %d (expected %d)",
+		initialSenderBal, finalSenderBal, expectedSenderBal,
+		initialReceiverBal, finalReceiverBal, expectedReceiverBal)
+
+	if finalSenderBal != expectedSenderBal {
+		t.Errorf("Concurrent Transfer Sender mismatch! Expected %d, got %d", expectedSenderBal, finalSenderBal)
+	}
+	if finalReceiverBal != expectedReceiverBal {
+		t.Errorf("Concurrent Transfer Receiver mismatch! Expected %d, got %d", expectedReceiverBal, finalReceiverBal)
+	}
+}
+
+func TestDurability_IdempotentTransfer(t *testing.T) {
+	senderPhone := "01055555555"
+	receiverPhone := "01166666666"
+	idemKey := fmt.Sprintf("test-idem-transfer-ok-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&reqCounter, 1))
+
+	initialSenderBal := getWalletBalance(t, senderPhone)
+	initialReceiverBal := getWalletBalance(t, receiverPhone)
+
+	// First request
+	status1, data1 := transfer(t, senderPhone, receiverPhone, 100, idemKey)
+	if status1 != http.StatusCreated {
+		t.Fatalf("First transfer failed with status %d: %v", status1, data1)
+	}
+
+	// Second request with SAME idempotency key
+	status2, data2 := transfer(t, senderPhone, receiverPhone, 100, idemKey)
+	if status2 != http.StatusCreated {
+		t.Fatalf("Idempotent retry failed with status %d: %v", status2, data2)
+	}
+
+	// Verify same transaction was returned
+	if data1["transaction_id"] != data2["transaction_id"] {
+		t.Errorf("Transaction IDs do not match! First: %v, Second: %v", data1["transaction_id"], data2["transaction_id"])
+	}
+
+	// Ensure balance was only changed ONCE
+	finalSenderBal := getWalletBalance(t, senderPhone)
+	finalReceiverBal := getWalletBalance(t, receiverPhone)
+
+	if finalSenderBal != initialSenderBal-100 {
+		t.Errorf("Sender charged multiple times! Expected %d, got %d", initialSenderBal-100, finalSenderBal)
+	}
+	if finalReceiverBal != initialReceiverBal+100 {
+		t.Errorf("Receiver credited multiple times! Expected %d, got %d", initialReceiverBal+100, finalReceiverBal)
+	}
+	t.Logf("Idempotency intact. Sender: %d -> %d | Receiver: %d -> %d", initialSenderBal, finalSenderBal, initialReceiverBal, finalReceiverBal)
+}
+
+func TestDurability_IdempotentFailedTransfer(t *testing.T) {
+	senderPhone := "01055555555"
+	receiverPhone := "01166666666"
+	idemKey := fmt.Sprintf("test-idem-transfer-fail-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&reqCounter, 1))
+
+	// Top up receiver to max
+	currentReceiverBal := getWalletBalance(t, receiverPhone)
+	amountToMax := int64(9000000000000000) - currentReceiverBal
+	if amountToMax > 0 {
+		status, _ := deposit(t, receiverPhone, amountToMax)
+		if status != http.StatusCreated {
+			t.Fatalf("Failed to top up receiver to max! Got status: %d", status)
+		}
+	}
+
+	initialSenderBal := getWalletBalance(t, senderPhone)
+
+	// First request — should fail with 422
+	status1, data1 := transfer(t, senderPhone, receiverPhone, 50, idemKey)
+	if status1 != http.StatusUnprocessableEntity {
+		t.Fatalf("Expected 422 for first failed transfer, got %d. Response: %v", status1, data1)
+	}
+
+	// Second request with SAME idempotency key — should also fail with 422
+	status2, data2 := transfer(t, senderPhone, receiverPhone, 50, idemKey)
+	if status2 != http.StatusUnprocessableEntity {
+		t.Fatalf("Expected 422 for idempotent retry, got %d. Response: %v", status2, data2)
+	}
+
+	// Error messages should match
+	if data1["error"] != data2["error"] {
+		t.Errorf("Idempotent error messages don't match: %v vs %v", data1["error"], data2["error"])
+	}
+
+	// Sender balance should be unchanged (the FAILED tx has BalanceBefore == BalanceAfter)
+	finalSenderBal := getWalletBalance(t, senderPhone)
+	if finalSenderBal != initialSenderBal {
+		t.Errorf("Sender balance should not change on failed transfer! Expected %d, got %d", initialSenderBal, finalSenderBal)
+	}
+
+	t.Logf("Idempotent failure intact. Status: %d, Error: %v", status2, data2["error"])
+
+	// Reset receiver back down
+	withdraw(t, receiverPhone, amountToMax)
+}
+
+func TestEdgeCase_TransferToSelf(t *testing.T) {
+	phone := "01055555555"
+
+	initialBal := getWalletBalance(t, phone)
+
+	status, data := transfer(t, phone, phone, 100)
+	if status == http.StatusCreated {
+		t.Fatalf("Self-transfer should be rejected, but got 201. Response: %v", data)
+	}
+	t.Logf("Correctly rejected self-transfer with status %d: %v", status, data)
+
+	// Balance should be unchanged
+	finalBal := getWalletBalance(t, phone)
+	if finalBal != initialBal {
+		t.Errorf("Balance should not change on self-transfer! Expected %d, got %d", initialBal, finalBal)
 	}
 }

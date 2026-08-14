@@ -7,6 +7,8 @@ definitions:
       phone_number:
         description: ReferenceID string `json:"reference_id"`
         type: string
+      reference_id:
+        type: string
     type: object
   transactions.DepositResponse:
     properties:
@@ -15,11 +17,35 @@ definitions:
       created_at:
         type: string
       status:
-        description: ReferenceID   string             `json:"reference_id"`
         type: string
       transaction_id:
         type: string
       wallet_id:
+        type: string
+    type: object
+  transactions.TransferRequest:
+    properties:
+      amount:
+        type: integer
+      receiver_phone:
+        type: string
+      reference_id:
+        type: string
+      sender_phone:
+        description: "ReferenceID \tstring \t`json:\"reference_id\"`"
+        type: string
+    type: object
+  transactions.TransferResponse:
+    properties:
+      sender_balance:
+        type: integer
+      sender_balance_before:
+        type: integer
+      sender_wallet_id:
+        type: string
+      status:
+        type: string
+      transaction_id:
         type: string
     type: object
   transactions.WithdrawalRequest:
@@ -29,6 +55,8 @@ definitions:
       phone_number:
         description: ReferenceID string `json:"reference_id"`
         type: string
+      reference_id:
+        type: string
     type: object
   transactions.WithdrawalResponse:
     properties:
@@ -37,7 +65,6 @@ definitions:
       created_at:
         type: string
       status:
-        description: ReferenceID   string             `json:"reference_id"`
         type: string
       transaction_id:
         type: string
@@ -64,6 +91,11 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/transactions.DepositRequest'
+      - description: Unique key to prevent duplicate balance modifications
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -99,6 +131,71 @@ paths:
       summary: Process a deposit transaction
       tags:
       - Transactions
+  /transactions/transfer:
+    post:
+      consumes:
+      - application/json
+      description: Validates the incoming payload, checks sender balance, and atomically
+        transfers funds from sender to receiver.
+      parameters:
+      - description: Transfer Request Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/transactions.TransferRequest'
+      - description: Unique key to prevent duplicate transfers
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Transfer transaction successful & created
+          schema:
+            $ref: '#/definitions/transactions.TransferResponse'
+        "400":
+          description: Bad Request (Invalid payload, insufficient balance, or phone
+            number)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Sender or Receiver Wallet Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity (Transfer failed due to receiver max capacity)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "429":
+          description: Too Many Requests (Concurrency throttle)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Process a transfer transaction
+      tags:
+      - Transactions
   /transactions/withdraw:
     post:
       consumes:
@@ -112,6 +209,11 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/transactions.WithdrawalRequest'
+      - description: Unique key to prevent duplicate balance modifications
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
       produces:
       - application/json
       responses:

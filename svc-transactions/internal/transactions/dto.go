@@ -9,18 +9,31 @@ type DepositRequest struct {
 	//ReferenceID string `json:"reference_id"`
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
+
+	ReferenceID string `json:"reference_id"`
 }
 
 type WithdrawalRequest struct {
 	//ReferenceID string `json:"reference_id"`
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
+
+	ReferenceID string `json:"reference_id"`
+}
+
+type TransferRequest struct {
+	//ReferenceID 	string 	`json:"reference_id"`
+	SenderPhoneNumber   	string 	`json:"sender_phone"`
+	ReceiverPhoneNumber 	string 	`json:"receiver_phone"`
+	Amount 					int64 	`json:"amount"`
+
+	ReferenceID string `json:"reference_id"`
 }
 
 type DepositResponse struct {
 	TransactionID primitive.ObjectID `json:"transaction_id"`
 	WalletID      string             `json:"wallet_id"`
-	//ReferenceID   string             `json:"reference_id"`
+
 	Status  string `json:"status"`
 	Balance int64  `json:"balance"`
 
@@ -30,11 +43,18 @@ type DepositResponse struct {
 type WithdrawalResponse struct {
 	TransactionID primitive.ObjectID `json:"transaction_id"`
 	WalletID      string             `json:"wallet_id"`
-	//ReferenceID   string             `json:"reference_id"`
 	Status  string `json:"status"`
 	Balance int64  `json:"balance"`
 
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type TransferResponse struct {
+	TransactionID 		primitive.ObjectID 	`json:"transaction_id"`
+	SenderWalletID      string          	`json:"sender_wallet_id"`
+	Status 			 	string 			 	`json:"status"`
+	SenderBalanceAfter  int64  				`json:"balance_after"`
+	SenderBalanceBefore int64  				`json:"balance_before"`
 }
 
 // client DTOs (temporary)
