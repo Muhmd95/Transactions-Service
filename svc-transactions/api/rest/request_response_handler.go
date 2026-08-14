@@ -255,7 +255,7 @@ func (c *TransactionsController) TransferHandler(w http.ResponseWriter, r *http.
 	if err != nil {
 		if errors.Is(err, transactions.ErrInvalidTransactionStatus) {
 			log.Warn().Msg("Invalid transaction status")
-			respondWithError(w, http.StatusNotFound, err.Error())
+			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if errors.Is(err, transactions.ErrWalletNotFound) {
