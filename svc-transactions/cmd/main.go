@@ -16,6 +16,7 @@ import (
 	// project paths
 	"svc-transactions/api/rest"
 	"svc-transactions/client/wallet"
+	"svc-transactions/client/notifications"
 	"svc-transactions/external/mongodb"
 	"svc-transactions/internal/transactions"
 	"svc-transactions/util/logger"
@@ -68,6 +69,12 @@ func main() {
 		walletTarget = "localhost:50051"
 	}
 
+	// get notifications client url
+	notificationsTarget := os.Getenv("NOTIFICATIONS_GRPC_URL")
+	if notificationsTarget == "" {
+		notificationsTarget = "localhost:50050"
+	}
+
 	mongoClient, err := mongodb.ConnectMongoDB(mongoURI)
 	if err != nil {
 		logger.Log.Fatal().Err(err).Msg("Failed to connect to the database")
@@ -89,7 +96,7 @@ func main() {
 		logger.Log.Fatal().Err(err).Msg("Failed to create transactions repository")
 	}
 	// init the client
-	conn, err := grpc.NewClient(
+	connWallet, err := grpc.NewClient(
 		walletTarget,
 		// Use insecure credentials because it is internal connection
 		// it is just for this project to reduce cpu usage and complexity
@@ -102,14 +109,27 @@ func main() {
 	if err != nil {
 		logger.Log.Fatal().Err(err).Msg("Failed to connect to WalletService")
 	}
-	defer conn.Close()
+	defer connWallet.Close()
+	walletClient := wallet.NewWalletClient(connWallet)
 
-	walletClient := wallet.NewWalletClient(conn)
-	//walletClient := wallet.NewWalletClient(walletBaseURL)
+
+	// init the notifications client
+	connNotifications, err := grpc.NewClient(
+		notificationsTarget,
+		// Use insecure credentials because it is internal connection
+		// it is just for this project to reduce cpu usage and complexity
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("Failed to connect to NotificationsService")
+	}
+	defer connNotifications.Close()
+
+	notificationsClient := notifications.NewNotificationsClient(connNotifications)
 	// create the transactions manager
 	txManger := mongodb.NewTransactionsTxManager(mongoClient)
 	// init the service
-	service := transactions.NewService(transactionsRepo, walletClient, txManger)
+	service := transactions.NewService(transactionsRepo, walletClient, txManger, notificationsClient)
 	// init the controller
 	controller := rest.NewTransactionsController(service)
 

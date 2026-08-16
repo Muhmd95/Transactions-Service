@@ -1,7 +1,7 @@
 github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc=
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
-github.com/Muhmd95/Contracts v0.0.0-20260809185838-a1128c324432 h1:hO7/RXPGLWzEDORcyPAB24W972Y7xSKekOb2lCFYaVA=
-github.com/Muhmd95/Contracts v0.0.0-20260809185838-a1128c324432/go.mod h1:Ldo4+X4akcZypgi1L6gyw7feurFEy+Z2oVY82Fw9n/M=
+github.com/Muhmd95/Contracts v0.0.0-20260816164442-7d2f72c3f554 h1:+UbMXGl3KJ7840nAHd+QRrgPZ0bWI3hcMSUegfFRmq8=
+github.com/Muhmd95/Contracts v0.0.0-20260816164442-7d2f72c3f554/go.mod h1:Ldo4+X4akcZypgi1L6gyw7feurFEy+Z2oVY82Fw9n/M=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

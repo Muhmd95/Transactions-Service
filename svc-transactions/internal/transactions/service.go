@@ -3,6 +3,7 @@ package transactions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"svc-transactions/util/logger"
 	"time"
@@ -15,6 +16,11 @@ type WalletClient interface {
 	GetWalletInfo(ctx context.Context, PhoneNumber string) (*GetWalletResponse, error)
 }
 
+type NotificationsClient interface {
+	SendSMSNotification(ctx context.Context, req *CreateSMSNotificationRequest) (*CreateSMSNotificationResponse, error)
+	SendPushNotification(ctx context.Context, req *CreatePushNotificationRequest) (*CreatePushNotificationResponse, error)
+}
+
 // this is a wrapper for the client to handle the transactions
 type TxManager interface {
 	WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
@@ -23,11 +29,12 @@ type TxManager interface {
 type Service struct {
 	repo         Repository
 	walletClient WalletClient
+	notificationsClient NotificationsClient
 	txManager    TxManager
 }
 
-func NewService(repo Repository, walletClient WalletClient, txManager TxManager) *Service {
-	return &Service{repo: repo, walletClient: walletClient, txManager: txManager}
+func NewService(repo Repository, walletClient WalletClient, txManager TxManager, notificationsClient NotificationsClient) *Service {
+	return &Service{repo: repo, walletClient: walletClient, txManager: txManager, notificationsClient: notificationsClient}
 }
 
 func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequest) (*DepositResponse, error) {
@@ -188,7 +195,25 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
 		}
 	}
-	// update the transaction to success
+
+	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+		PhoneNumber:   req.PhoneNumber,
+		Message:       fmt.Sprintf("Your deposit of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
+		TransactionID: NewTransaction.ID.Hex(),
+		WalletID:      walletID,
+		Balance:       newBalance,
+		Amount:        NewTransaction.Amount,
+	})
+
+	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+		PhoneNumber:   req.PhoneNumber,
+		Message:       fmt.Sprintf("Your deposit of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
+		TransactionID: NewTransaction.ID.Hex(),
+		WalletID:      walletID,
+		Balance:       newBalance,
+		Amount:        NewTransaction.Amount,
+	})
+	
 	return &DepositResponse{
 		TransactionID: NewTransaction.ID,
 		WalletID:      walletID,
@@ -353,6 +378,25 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
 		}
 	}
+
+
+	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+		PhoneNumber:   req.PhoneNumber,
+		Message:       fmt.Sprintf("Your withdrawal of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
+		TransactionID: NewTransaction.ID.Hex(),
+		WalletID:      walletID,
+		Balance:       newBalance,
+		Amount:        NewTransaction.Amount,
+	})
+
+	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+		PhoneNumber:   req.PhoneNumber,
+		Message:       fmt.Sprintf("Your withdrawal of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
+		TransactionID: NewTransaction.ID.Hex(),
+		WalletID:      walletID,
+		Balance:       newBalance,
+		Amount:        NewTransaction.Amount,
+	})
 
 	return &WithdrawalResponse{
 		TransactionID: NewTransaction.ID,
@@ -682,6 +726,46 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 			log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Invalid phone number format (service layer)")
 		}
 	}
+
+
+	// notify the sender about the transfer
+	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+		PhoneNumber:   req.SenderPhoneNumber,
+		Message:       fmt.Sprintf("Your transfer of %d to %s has been successfully processed. Your new balance is %d.", req.Amount, req.ReceiverPhoneNumber, newSenderBalance),
+		TransactionID: newWithdrawalTransaction.ID.Hex(),
+		WalletID:      newWithdrawalTransaction.WalletID,
+		Balance:       newSenderBalance,
+		Amount:        newWithdrawalTransaction.Amount,
+	})
+	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+		PhoneNumber:   req.SenderPhoneNumber,
+		Message:       fmt.Sprintf("Your transfer of %d to %s has been successfully processed. Your new balance is %d.", req.Amount, req.ReceiverPhoneNumber, newSenderBalance),
+		TransactionID: newWithdrawalTransaction.ID.Hex(),
+		WalletID:      newWithdrawalTransaction.WalletID,
+		Balance:       newSenderBalance,
+		Amount:        newWithdrawalTransaction.Amount,
+	})
+
+
+	// notify the receiver about the transfer
+	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+		PhoneNumber:   req.ReceiverPhoneNumber,
+		Message:       fmt.Sprintf("You have received a transfer of %d from %s. Your new balance is %d.", req.Amount, req.SenderPhoneNumber, newReceiverBalance),
+		TransactionID: newDepositTransaction.ID.Hex(),
+		WalletID:      newDepositTransaction.WalletID,
+		Balance:       newReceiverBalance,
+		Amount:        newDepositTransaction.Amount,
+	})
+	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+		PhoneNumber:   req.ReceiverPhoneNumber,
+		Message:       fmt.Sprintf("You have received a transfer of %d from %s. Your new balance is %d.", req.Amount, req.SenderPhoneNumber, newReceiverBalance),
+		TransactionID: newDepositTransaction.ID.Hex(),
+		WalletID:      newDepositTransaction.WalletID,
+		Balance:       newReceiverBalance,
+		Amount:        newDepositTransaction.Amount,
+	})
+
+
 
 	return &TransferResponse{
 		TransactionID:       newWithdrawalTransaction.ID,

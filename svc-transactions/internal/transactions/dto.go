@@ -57,7 +57,7 @@ type TransferResponse struct {
 	SenderBalanceBefore int64  				`json:"balance_before"`
 }
 
-// client DTOs (temporary)
+// client DTOs 
 type WalletModifyBalanceRequest struct {
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
@@ -78,4 +78,31 @@ type WalletErrorResponse struct {
 type GetWalletResponse struct {
 	WalletID string
 	OwnerName string
+}
+
+type CreateSMSNotificationRequest struct {
+	PhoneNumber   string
+	Message       string
+	TransactionID string
+	WalletID      string
+	Amount        int64
+	Balance       int64
+}
+
+type CreateSMSNotificationResponse struct {
+	Success        bool
+	NotificationID string
+}
+
+type CreatePushNotificationRequest struct {
+	PhoneNumber   string
+	Message       string
+	TransactionID string
+	WalletID      string
+	Amount        int64
+	Balance       int64
+}
+type CreatePushNotificationResponse struct {
+	Success        bool
+	NotificationID string
 }
