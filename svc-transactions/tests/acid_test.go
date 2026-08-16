@@ -806,10 +806,10 @@ func TestEdgeCase_TransferToSelf(t *testing.T) {
 	initialBal := getWalletBalance(t, phone)
 
 	status, data := transfer(t, phone, phone, 100)
-	if status == http.StatusCreated {
-		t.Fatalf("Self-transfer should be rejected, but got 201. Response: %v", data)
+	if status != http.StatusBadRequest {
+		t.Fatalf("Expected 400 Bad Request for self-transfer, got %d. Response: %v", status, data)
 	}
-	t.Logf("Correctly rejected self-transfer with status %d: %v", status, data)
+	t.Logf("Correctly rejected self-transfer with status 400 Bad Request: %v", data)
 
 	// Balance should be unchanged
 	finalBal := getWalletBalance(t, phone)

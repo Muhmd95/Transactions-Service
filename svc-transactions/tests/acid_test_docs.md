@@ -25,7 +25,7 @@ This document describes the `acid_test.go` integration tests for the Transaction
 | `TestIsolation_ConcurrentTransfers` | 20 | Fires 20 simultaneous transfers to test concurrency on both sender and receiver. |
 | `TestDurability_IdempotentTransfer` | 1 | Verifies retry of successful transfer returns same transaction ID, balance only changes once. |
 | `TestDurability_IdempotentFailedTransfer` | 1 | Verifies retry of failed transfer returns same 422, sender balance unchanged. |
-| `TestEdgeCase_TransferToSelf` | 1 | Ensures transferring to yourself is rejected. |
+| `TestEdgeCase_TransferToSelf` | 1 | Ensures transferring to yourself is rejected with 400 Bad Request. |
 
 ## How the Code Works Under the Hood
 Because the Transactions Service enforces a unique sequence number for each wallet transaction, concurrent transactions for the same wallet are serialized. 
