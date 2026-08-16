@@ -44,7 +44,9 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 	}
 
 	var reqData transactions.DepositRequest
-	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&reqData); err != nil {
 		log.Warn().Err(err).Msg(("Invalid request payload"))
 		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
@@ -132,7 +134,9 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 
 
 	var reqData transactions.WithdrawalRequest
-	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&reqData); err != nil {
 		log.Warn().Err(err).Msg(("Invalid request payload"))
 		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
@@ -221,7 +225,9 @@ func (c *TransactionsController) TransferHandler(w http.ResponseWriter, r *http.
 	}
 
 	var reqData transactions.TransferRequest
-	if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&reqData); err != nil {
 		log.Warn().Err(err).Msg(("Invalid request payload"))
 		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
