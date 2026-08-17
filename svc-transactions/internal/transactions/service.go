@@ -540,10 +540,6 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 				CreatedAt: time.Now(),
 			}
 
-			if err := s.repo.CreateTransaction(txCtx, newWithdrawalTransaction); err != nil {
-				return err
-			}
-
 			//======================================================================================
 			//======================================================================================
 			// first part of the transfer is finished the second part is the deposit to the receiver
@@ -588,7 +584,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 				CreatedAt: time.Now(),
 			}
 
-			if err := s.repo.CreateTransaction(txCtx, newDepositTransaction); err != nil {
+			if err := s.repo.CreateCoupledTransaction(txCtx, newDepositTransaction, newWithdrawalTransaction); err != nil {
 				return err
 			}
 
