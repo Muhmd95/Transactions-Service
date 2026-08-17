@@ -23,9 +23,9 @@ type WithdrawalRequest struct {
 
 type TransferRequest struct {
 	//ReferenceID 	string 	`json:"reference_id"`
-	SenderPhoneNumber   	string 	`json:"sender_phone"`
-	ReceiverPhoneNumber 	string 	`json:"receiver_phone"`
-	Amount 					int64 	`json:"amount"`
+	SenderPhoneNumber   string `json:"sender_phone"`
+	ReceiverPhoneNumber string `json:"receiver_phone"`
+	Amount              int64  `json:"amount"`
 
 	ReferenceID string `json:"reference_id"`
 }
@@ -43,25 +43,25 @@ type DepositResponse struct {
 type WithdrawalResponse struct {
 	TransactionID primitive.ObjectID `json:"transaction_id"`
 	WalletID      string             `json:"wallet_id"`
-	Status  string `json:"status"`
-	Balance int64  `json:"balance"`
+	Status        string             `json:"status"`
+	Balance       int64              `json:"balance"`
 
 	CreatedAt time.Time `json:"created_at"`
 }
 
 type TransferResponse struct {
-	TransactionID 		primitive.ObjectID 	`json:"transaction_id"`
-	SenderWalletID      string          	`json:"sender_wallet_id"`
-	Status 			 	string 			 	`json:"status"`
-	SenderBalanceAfter  int64  				`json:"balance_after"`
-	SenderBalanceBefore int64  				`json:"balance_before"`
+	TransactionID       primitive.ObjectID `json:"transaction_id"`
+	SenderWalletID      string             `json:"sender_wallet_id"`
+	Status              string             `json:"status"`
+	SenderBalanceAfter  int64              `json:"balance_after"`
+	SenderBalanceBefore int64              `json:"balance_before"`
 }
 
-// client DTOs 
+// client DTOs
 type WalletModifyBalanceRequest struct {
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
-	RefID  		string 
+	RefID       string
 }
 
 type WalletModifyBalanceResponse struct {
@@ -76,7 +76,7 @@ type WalletErrorResponse struct {
 }
 
 type GetWalletResponse struct {
-	WalletID string
+	WalletID  string
 	OwnerName string
 }
 
@@ -87,6 +87,7 @@ type CreateSMSNotificationRequest struct {
 	WalletID      string
 	Amount        int64
 	Balance       int64
+	CreatedAt     time.Time
 }
 
 type CreateSMSNotificationResponse struct {
@@ -101,6 +102,7 @@ type CreatePushNotificationRequest struct {
 	WalletID      string
 	Amount        int64
 	Balance       int64
+	CreatedAt     time.Time
 }
 type CreatePushNotificationResponse struct {
 	Success        bool

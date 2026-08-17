@@ -27,10 +27,10 @@ type TxManager interface {
 }
 
 type Service struct {
-	repo         Repository
-	walletClient WalletClient
+	repo                Repository
+	walletClient        WalletClient
 	notificationsClient NotificationsClient
-	txManager    TxManager
+	txManager           TxManager
 }
 
 func NewService(repo Repository, walletClient WalletClient, txManager TxManager, notificationsClient NotificationsClient) *Service {
@@ -196,24 +196,34 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		}
 	}
 
-	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+	_, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 		PhoneNumber:   req.PhoneNumber,
 		Message:       fmt.Sprintf("Your deposit of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
 		TransactionID: NewTransaction.ID.Hex(),
 		WalletID:      walletID,
 		Balance:       newBalance,
 		Amount:        NewTransaction.Amount,
+		CreatedAt:     NewTransaction.CreatedAt,
 	})
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.PhoneNumber).Msg("Failed to send SMS notification (service layer)")
+		log.Info().Str("phone_number", req.PhoneNumber).Int64("amount", req.Amount).Msg("Queuing SMS notification request to NotificationsService (from service layer)")
+	}
 
-	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+	_, err = s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
 		PhoneNumber:   req.PhoneNumber,
 		Message:       fmt.Sprintf("Your deposit of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
 		TransactionID: NewTransaction.ID.Hex(),
 		WalletID:      walletID,
 		Balance:       newBalance,
 		Amount:        NewTransaction.Amount,
+		CreatedAt:     NewTransaction.CreatedAt,
 	})
-	
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.PhoneNumber).Msg("Failed to send push notification (service layer)")
+		log.Info().Str("phone_number", req.PhoneNumber).Int64("amount", req.Amount).Msg("Queuing push notification request to NotificationsService (from service layer)")
+	}
+
 	return &DepositResponse{
 		TransactionID: NewTransaction.ID,
 		WalletID:      walletID,
@@ -379,8 +389,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		}
 	}
 
-
-	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+	_, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 		PhoneNumber:   req.PhoneNumber,
 		Message:       fmt.Sprintf("Your withdrawal of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
 		TransactionID: NewTransaction.ID.Hex(),
@@ -388,8 +397,12 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		Balance:       newBalance,
 		Amount:        NewTransaction.Amount,
 	})
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.PhoneNumber).Msg("Failed to send SMS notification (service layer)")
+		log.Info().Str("phone_number", req.PhoneNumber).Int64("amount", req.Amount).Msg("Queuing SMS notification request to NotificationsService (from service layer)")
+	}
 
-	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+	_, err = s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
 		PhoneNumber:   req.PhoneNumber,
 		Message:       fmt.Sprintf("Your withdrawal of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
 		TransactionID: NewTransaction.ID.Hex(),
@@ -397,6 +410,10 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		Balance:       newBalance,
 		Amount:        NewTransaction.Amount,
 	})
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.PhoneNumber).Msg("Failed to send push notification (service layer)")
+		log.Info().Str("phone_number", req.PhoneNumber).Int64("amount", req.Amount).Msg("Queuing push notification request to NotificationsService (from service layer)")
+	}
 
 	return &WithdrawalResponse{
 		TransactionID: NewTransaction.ID,
@@ -727,9 +744,8 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		}
 	}
 
-
 	// notify the sender about the transfer
-	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+	_, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 		PhoneNumber:   req.SenderPhoneNumber,
 		Message:       fmt.Sprintf("Your transfer of %d to %s has been successfully processed. Your new balance is %d.", req.Amount, req.ReceiverPhoneNumber, newSenderBalance),
 		TransactionID: newWithdrawalTransaction.ID.Hex(),
@@ -737,7 +753,11 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		Balance:       newSenderBalance,
 		Amount:        newWithdrawalTransaction.Amount,
 	})
-	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Failed to send SMS notification (service layer)")
+		log.Info().Str("phone_number", req.SenderPhoneNumber).Int64("amount", req.Amount).Msg("Queuing SMS notification request to NotificationsService (from service layer)")
+	}
+	_, err = s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
 		PhoneNumber:   req.SenderPhoneNumber,
 		Message:       fmt.Sprintf("Your transfer of %d to %s has been successfully processed. Your new balance is %d.", req.Amount, req.ReceiverPhoneNumber, newSenderBalance),
 		TransactionID: newWithdrawalTransaction.ID.Hex(),
@@ -745,10 +765,13 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		Balance:       newSenderBalance,
 		Amount:        newWithdrawalTransaction.Amount,
 	})
-
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Failed to send push notification (service layer)")
+		log.Info().Str("phone_number", req.SenderPhoneNumber).Int64("amount", req.Amount).Msg("Queuing push notification request to NotificationsService (from service layer)")
+	}
 
 	// notify the receiver about the transfer
-	s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
+	_, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 		PhoneNumber:   req.ReceiverPhoneNumber,
 		Message:       fmt.Sprintf("You have received a transfer of %d from %s. Your new balance is %d.", req.Amount, req.SenderPhoneNumber, newReceiverBalance),
 		TransactionID: newDepositTransaction.ID.Hex(),
@@ -756,7 +779,11 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		Balance:       newReceiverBalance,
 		Amount:        newDepositTransaction.Amount,
 	})
-	s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Failed to send SMS notification (service layer)")
+		log.Info().Str("phone_number", req.ReceiverPhoneNumber).Int64("amount", req.Amount).Msg("Queuing SMS notification request to NotificationsService (from service layer)")
+	}
+	_, err = s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
 		PhoneNumber:   req.ReceiverPhoneNumber,
 		Message:       fmt.Sprintf("You have received a transfer of %d from %s. Your new balance is %d.", req.Amount, req.SenderPhoneNumber, newReceiverBalance),
 		TransactionID: newDepositTransaction.ID.Hex(),
@@ -764,8 +791,10 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		Balance:       newReceiverBalance,
 		Amount:        newDepositTransaction.Amount,
 	})
-
-
+	if err != nil {
+		log.Error().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Failed to send push notification (service layer)")
+		log.Info().Str("phone_number", req.ReceiverPhoneNumber).Int64("amount", req.Amount).Msg("Queuing push notification request to NotificationsService (from service layer)")
+	}
 
 	return &TransferResponse{
 		TransactionID:       newWithdrawalTransaction.ID,

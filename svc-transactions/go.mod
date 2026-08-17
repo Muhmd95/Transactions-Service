@@ -3,7 +3,7 @@ module svc-transactions
 go 1.26.5
 
 require (
-	github.com/Muhmd95/Contracts v0.0.0-20260816164442-7d2f72c3f554
+	github.com/Muhmd95/Contracts v0.0.0-20260817104701-829e9b95c500
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/zerolog v1.35.1
 	github.com/swaggo/http-swagger v1.3.4
@@ -15,6 +15,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 	google.golang.org/grpc v1.83.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -55,5 +56,4 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 )

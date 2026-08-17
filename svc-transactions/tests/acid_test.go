@@ -1,5 +1,3 @@
-//go:build integration
-
 package tests
 
 import (
@@ -90,7 +88,7 @@ func getWalletBalance(t *testing.T, phone string) int64 {
 	if !ok {
 		t.Fatalf("balance field missing from response: %s", string(respBody))
 	}
-	
+
 	balanceFloat, ok := balanceVal.(float64)
 	if !ok {
 		t.Fatalf("balance is not a number. Got type %T, value: %v", balanceVal, balanceVal)
