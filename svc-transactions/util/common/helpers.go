@@ -12,7 +12,7 @@ func ValidatePhoneNumber(phoneNumber *string) error {
 	}
 
 	// 2. Verify the payload is numeric (prevents +20ABCDEFGHIJ)
-	for _, ch := range (*phoneNumber) {
+	for _, ch := range *phoneNumber {
 		if ch < '0' || ch > '9' {
 			return transactions.ErrInvalidPhoneNumber // return the domain error for invalid phone number format
 		}

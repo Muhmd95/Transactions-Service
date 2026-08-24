@@ -13,8 +13,6 @@ import (
 	"svc-transactions/util/logger"
 )
 
-
-
 type grpcClient struct {
 	client walletv1.WalletServiceClient
 }
@@ -57,7 +55,7 @@ func (c *grpcClient) WalletModifyBalance(ctx context.Context, req *transactions.
 			} else {
 				return nil, err
 			}
-		case codes.Internal: 
+		case codes.Internal:
 			log.Error().Err(err).Msg("Internal server error from WalletService (from grpc wallet client)")
 			return nil, fmt.Errorf("internal server error from WalletService: %w", err)
 		default:
@@ -91,7 +89,7 @@ func (g *grpcClient) GetWalletInfo(ctx context.Context, PhoneNumber string) (*tr
 			log.Error().Err(err).Msg("Failed to call GetWalletInfo (from grpc wallet client)")
 			return nil, fmt.Errorf("failed to call GetWalletInfo: %w", err)
 		}
-		
+
 		if st.Code() == codes.NotFound {
 			return nil, transactions.ErrWalletNotFound
 		}
@@ -101,12 +99,11 @@ func (g *grpcClient) GetWalletInfo(ctx context.Context, PhoneNumber string) (*tr
 	}
 
 	return &transactions.GetWalletResponse{
-		WalletID: clientRes.WalletId,
+		WalletID:  clientRes.WalletId,
 		OwnerName: clientRes.OwnerName,
 	}, nil
 
 }
-
 
 // type httpClient struct {
 // 	baseURL string
