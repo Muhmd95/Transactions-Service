@@ -102,3 +102,21 @@ type CreatePushNotificationResponse struct {
 	Success        bool
 	NotificationID string
 }
+
+// kafka dtos
+const (
+	EventWalletCredited = "WALLET_CREDITED"
+	EventWalletDebited  = "WALLET_DEBITED"
+)
+
+type TransactionEvent struct {
+	EventType          string // "WALLET_CREDITED" | "WALLET_DEBITED"
+	TxnID              string
+	WalletID           string // partition key
+	PhoneNumber        string
+	NationalID         string // for the future will wire the user and their wallets
+	Amount             int64  // amount of the txn
+	BalanceAfter       int64
+	OccurredAt         time.Time // business time when the money moved
+	CoupledPhoneNumber string    // when the transaction is transfer will be put with the sender						// must be checked first in the notifications service
+}
