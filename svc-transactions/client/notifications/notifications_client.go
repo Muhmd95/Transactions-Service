@@ -72,7 +72,6 @@ func (c *grpcClient) SendSMSNotification(ctx context.Context, req *transactions.
 	clientRes, err := c.client.SendSMSNotification(ctx, notificationReq)
 	if err != nil {
 		st, _ := status.FromError(err)
-		// ok will be true only if the error is from a grpc server
 		if st.Code() == codes.Unavailable || st.Code() == codes.DeadlineExceeded {
 			select {
 			case c.smsQueue <- notificationReq:
@@ -109,7 +108,6 @@ func (c *grpcClient) SendPushNotification(ctx context.Context, req *transactions
 	clientRes, err := c.client.SendPushNotification(ctx, notificationReq)
 	if err != nil {
 		st, _ := status.FromError(err)
-		// ok will be true only if the error is from a grpc server
 		if st.Code() == codes.Unavailable || st.Code() == codes.DeadlineExceeded {
 			select {
 			case c.pushQueue <- notificationReq:

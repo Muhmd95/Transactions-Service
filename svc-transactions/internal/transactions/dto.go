@@ -9,16 +9,12 @@ type DepositRequest struct {
 	//ReferenceID string `json:"reference_id"`
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
-
-	ReferenceID string `json:"reference_id"`
 }
 
 type WithdrawalRequest struct {
 	//ReferenceID string `json:"reference_id"`
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
-
-	ReferenceID string `json:"reference_id"`
 }
 
 type TransferRequest struct {
@@ -26,8 +22,6 @@ type TransferRequest struct {
 	SenderPhoneNumber   string `json:"sender_phone"`
 	ReceiverPhoneNumber string `json:"receiver_phone"`
 	Amount              int64  `json:"amount"`
-
-	ReferenceID string `json:"reference_id"`
 }
 
 type DepositResponse struct {

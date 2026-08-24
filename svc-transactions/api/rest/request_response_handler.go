@@ -52,8 +52,6 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	reqData.ReferenceID = refID
-
 	if reqData.Amount <= 0 {
 		log.Warn().Msg("Deposit amount must be greater than zero")
 		respondWithError(w, http.StatusBadRequest, "Deposit amount must be greater than zero")
@@ -69,7 +67,7 @@ func (c *TransactionsController) DepositHandler(w http.ResponseWriter, r *http.R
 
 	log.Info().Str("phone_number", reqData.PhoneNumber).Msg("Processing deposit transaction request")
 
-	depositRes, err := c.service.CreateDepositTransaction(ctx, &reqData)
+	depositRes, err := c.service.CreateDepositTransaction(ctx, &reqData, refID)
 	if err != nil {
 		if errors.Is(err, transactions.ErrWalletNotFound) {
 			respondWithError(w, http.StatusNotFound, "Wallet not found")
@@ -142,8 +140,6 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	reqData.ReferenceID = refID
-
 	if reqData.Amount <= 0 {
 		log.Warn().Msg("Withdrawal amount must be greater than zero")
 		respondWithError(w, http.StatusBadRequest, "Withdrawal amount must be greater than zero")
@@ -159,7 +155,7 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 
 	log.Info().Str("phone_number", reqData.PhoneNumber).Msg("Processing withdrawal transaction request")
 
-	withdrawRes, err := c.service.CreateWithdrawalTransaction(ctx, &reqData)
+	withdrawRes, err := c.service.CreateWithdrawalTransaction(ctx, &reqData, refID)
 	if err != nil {
 		if errors.Is(err, transactions.ErrWalletNotFound) {
 			log.Warn().Str("phone_number", reqData.PhoneNumber).Msg("Wallet not found")
@@ -233,8 +229,6 @@ func (c *TransactionsController) TransferHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	reqData.ReferenceID = refID
-
 	if reqData.Amount <= 0 {
 		log.Warn().Msg("Transfer amount must be greater than zero")
 		respondWithError(w, http.StatusBadRequest, "Transfer amount must be greater than zero")
@@ -257,7 +251,7 @@ func (c *TransactionsController) TransferHandler(w http.ResponseWriter, r *http.
 
 	log.Info().Msg("Processing transfer transaction request")
 
-	transferRes, err := c.service.CreateTransferTransaction(ctx, &reqData)
+	transferRes, err := c.service.CreateTransferTransaction(ctx, &reqData, refID)
 	if err != nil {
 		if errors.Is(err, transactions.ErrInvalidTransactionStatus) {
 			log.Warn().Msg("Invalid transaction status")

@@ -37,10 +37,9 @@ func NewService(repo Repository, walletClient WalletClient, txManager TxManager,
 	return &Service{repo: repo, walletClient: walletClient, txManager: txManager, notificationsClient: notificationsClient}
 }
 
-func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequest) (*DepositResponse, error) {
+func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequest, refID string) (*DepositResponse, error) {
 	log := logger.Ctx(ctx)
 
-	refID := req.ReferenceID
 	processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, nil)
 	if err != nil {
 		if errors.Is(err, ErrTransactionNotFound) {
@@ -127,7 +126,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 				BalanceBefore: oldBalance,
 				BalanceAfter:  newBalance,
 				SeqNumber:     newSeqNumber,
-				ReferenceID:   req.ReferenceID,
+				ReferenceID:   refID,
 
 				CreatedAt: time.Now(),
 			}
@@ -142,9 +141,9 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		}
 
 		if errors.Is(err, ErrDuplicateReferenceID) {
-			processedTX, err := s.repo.GetTransactionByReferenceID(ctx, req.ReferenceID, nil)
+			processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, nil)
 			if err != nil {
-				log.Error().Err(err).Str("reference_id", req.ReferenceID).Msg("couldn't fetch the processed transaction by reference id (service layer)")
+				log.Error().Err(err).Str("reference_id", refID).Msg("couldn't fetch the processed transaction by reference id (service layer)")
 				return nil, err
 			}
 			return &DepositResponse{
@@ -234,11 +233,10 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 
 }
 
-func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *WithdrawalRequest) (*WithdrawalResponse, error) {
+func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *WithdrawalRequest, refID string) (*WithdrawalResponse, error) {
 	maxRetries := 100
 	log := logger.Ctx(ctx)
 
-	refID := req.ReferenceID
 	processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, nil)
 	if err != nil {
 		if errors.Is(err, ErrTransactionNotFound) {
@@ -323,7 +321,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 				BalanceBefore: oldBalance,
 				BalanceAfter:  newBalance,
 				SeqNumber:     newSeqNumber,
-				ReferenceID:   req.ReferenceID,
+				ReferenceID:   refID,
 
 				CreatedAt: time.Now(),
 			}
@@ -338,9 +336,9 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		}
 
 		if errors.Is(err, ErrDuplicateReferenceID) {
-			processedTX, err := s.repo.GetTransactionByReferenceID(ctx, req.ReferenceID, nil)
+			processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, nil)
 			if err != nil {
-				log.Error().Err(err).Str("reference_id", req.ReferenceID).Msg("couldn't fetch the processed transaction by reference id (service layer)")
+				log.Error().Err(err).Str("reference_id", refID).Msg("couldn't fetch the processed transaction by reference id (service layer)")
 				return nil, err
 			}
 			return &WithdrawalResponse{
@@ -424,11 +422,10 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	}, nil
 }
 
-func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
+func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRequest, refID string) (*TransferResponse, error) {
 	maxRetries := 100
 	log := logger.Ctx(ctx)
 
-	refID := req.ReferenceID
 	processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, &req.SenderPhoneNumber)
 	if err != nil {
 		if errors.Is(err, ErrTransactionNotFound) {
@@ -439,7 +436,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		}
 	} else {
 		if processedTX.Status != StatusCompleted {
-			log.Error().Str("reference_id", req.ReferenceID).Msg("Transaction status is not completed, something went wrong")
+			log.Error().Str("reference_id", refID).Msg("Transaction status is not completed, something went wrong")
 			return nil, ErrHalfTransferFail
 		}
 		return &TransferResponse{
@@ -535,7 +532,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 				BalanceBefore: oldSenderBalance,
 				BalanceAfter:  newSenderBalance,
 				SeqNumber:     newSenderSeqNumber,
-				ReferenceID:   req.ReferenceID,
+				ReferenceID:   refID,
 
 				CreatedAt: time.Now(),
 			}
@@ -579,7 +576,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 				BalanceBefore: oldReceiverBalance,
 				BalanceAfter:  newReceiverBalance,
 				SeqNumber:     newReceiverSeqNumber,
-				ReferenceID:   req.ReferenceID + "_deposit",
+				ReferenceID:   refID + "_deposit",
 
 				CreatedAt: time.Now(),
 			}
@@ -597,13 +594,13 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		}
 
 		if errors.Is(err, ErrDuplicateReferenceID) {
-			processedTX, err := s.repo.GetTransactionByReferenceID(ctx, req.ReferenceID, nil)
+			processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, nil)
 			if err != nil {
-				log.Error().Err(err).Str("reference_id", req.ReferenceID).Msg("couldn't fetch the processed transaction by reference id (service layer)")
+				log.Error().Err(err).Str("reference_id", refID).Msg("couldn't fetch the processed transaction by reference id (service layer)")
 				return nil, err
 			}
 			if processedTX.Status != StatusCompleted {
-				log.Info().Str("reference_id", req.ReferenceID).Msg("Transaction status is not completed, something went wrong")
+				log.Info().Str("reference_id", refID).Msg("Transaction status is not completed, something went wrong")
 				return nil, ErrHalfTransferFail
 			}
 			return &TransferResponse{
@@ -657,7 +654,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 					BalanceBefore: latestSenderTX.BalanceAfter,
 					BalanceAfter:  latestSenderTX.BalanceAfter,
 					SeqNumber:     newSenderSeqNumber,
-					ReferenceID:   req.ReferenceID,
+					ReferenceID:   refID,
 
 					CreatedAt: time.Now(),
 				}
@@ -675,7 +672,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 			}
 
 			if errors.Is(err, ErrDuplicateReferenceID) {
-				log.Info().Str("reference_id", req.ReferenceID).Msg("Transaction was already created with failed status")
+				log.Info().Str("reference_id", refID).Msg("Transaction was already created with failed status")
 				return nil, ErrHalfTransferFail
 			}
 
