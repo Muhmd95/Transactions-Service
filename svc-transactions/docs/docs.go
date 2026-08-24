@@ -275,9 +275,6 @@ const docTemplate = `{
                 "phone_number": {
                     "description": "ReferenceID string ` + "`" + `json:\"reference_id\"` + "`" + `",
                     "type": "string"
-                },
-                "reference_id": {
-                    "type": "string"
                 }
             }
         },
@@ -310,9 +307,6 @@ const docTemplate = `{
                 "receiver_phone": {
                     "type": "string"
                 },
-                "reference_id": {
-                    "type": "string"
-                },
                 "sender_phone": {
                     "description": "ReferenceID \tstring \t` + "`" + `json:\"reference_id\"` + "`" + `",
                     "type": "string"
@@ -322,10 +316,10 @@ const docTemplate = `{
         "transactions.TransferResponse": {
             "type": "object",
             "properties": {
-                "sender_balance": {
+                "balance_after": {
                     "type": "integer"
                 },
-                "sender_balance_before": {
+                "balance_before": {
                     "type": "integer"
                 },
                 "sender_wallet_id": {
@@ -347,9 +341,6 @@ const docTemplate = `{
                 },
                 "phone_number": {
                     "description": "ReferenceID string ` + "`" + `json:\"reference_id\"` + "`" + `",
-                    "type": "string"
-                },
-                "reference_id": {
                     "type": "string"
                 }
             }
