@@ -199,6 +199,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
 		}
 	}
+	log.Info().Msg("Wallet balance has been modified successfully (service layer)")
 
 	// _, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 	// 	PhoneNumber:   req.PhoneNumber,
@@ -242,6 +243,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 	if err != nil {
 		log.Error().Err(err).Str("wallet_id", walletID).Msg("Failed to publish transaction event to Kafka (service layer)")
 	}
+	log.Info().Msg("Deposit event has been published successfully to Kafka (service layer)")
 
 	return &DepositResponse{
 		TransactionID: NewTransaction.ID,
@@ -406,6 +408,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
 		}
 	}
+	log.Info().Msg("Wallet balance has been modified successfully (service layer)")
 
 	// _, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 	// 	PhoneNumber:   req.PhoneNumber,
@@ -447,6 +450,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	if err != nil {
 		log.Error().Err(err).Str("wallet_id", walletID).Msg("Failed to publish transaction event to Kafka (service layer)")
 	}
+	log.Info().Msg("Withdrawal event has been published successfully to Kafka (service layer)")
 
 	return &WithdrawalResponse{
 		TransactionID: NewTransaction.ID,
@@ -759,6 +763,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 			log.Warn().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Invalid phone number format (service layer)")
 		}
 	}
+	log.Info().Msg("Sender wallet balance has been modified successfully (service layer)")
 
 	// tell the wallet to modify the receiver balance
 	_, err = s.walletClient.WalletModifyBalance(ctx, clientReqDeposit)
@@ -771,7 +776,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 			log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Invalid phone number format (service layer)")
 		}
 	}
-
+	log.Info().Msg("Receiver wallet balance has been modified successfully (service layer)")
 	// // notify the sender about the transfer
 	// _, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 	// 	PhoneNumber:   req.SenderPhoneNumber,
@@ -840,6 +845,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 	if err != nil {
 		log.Error().Err(err).Str("wallet_id", newWithdrawalTransaction.WalletID).Msg("Failed to publish transaction event to Kafka (service layer)")
 	}
+	log.Info().Msg("Transfer event for sender has been published successfully to Kafka (service layer)")
 
 	// event for receiver
 	evtd := &TransactionEvent{
@@ -857,7 +863,8 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 	if err != nil {
 		log.Error().Err(err).Str("wallet_id", newDepositTransaction.WalletID).Msg("Failed to publish transaction event to Kafka (service layer)")
 	}
-
+	log.Info().Msg("Transfer event for receiver has been published successfully to Kafka (service layer)")	
+	
 	return &TransferResponse{
 		TransactionID:       newWithdrawalTransaction.ID,
 		SenderWalletID:      newWithdrawalTransaction.WalletID,
