@@ -17,7 +17,7 @@ import (
 	"svc-transactions/api/rest"
 	"svc-transactions/client/notifications"
 	"svc-transactions/client/wallet"
-	"svc-transactions/external/kafka/producer"
+	// "svc-transactions/external/kafka/producer"
 	"svc-transactions/external/mongodb"
 	"svc-transactions/internal/transactions"
 	"svc-transactions/util/logger"
@@ -77,11 +77,11 @@ func main() {
 	}
 
 	// get kafka port
-	kafkaBroker := os.Getenv("KAFKA_BROKER")
-	if kafkaBroker == "" {
-		kafkaBroker = "kafka:9092"
-	}
-	brokers := []string{kafkaBroker}
+	// kafkaBroker := os.Getenv("KAFKA_BROKER")
+	// if kafkaBroker == "" {
+	// 	kafkaBroker = "kafka:9092"
+	// }
+	// brokers := []string{kafkaBroker}
 
 	mongoClient, err := mongodb.ConnectMongoDB(mongoURI)
 	if err != nil {
@@ -136,13 +136,13 @@ func main() {
 	// create the transactions manager
 	txManger := mongodb.NewTransactionsTxManager(mongoClient)
 	// kafka producer
-	pub, err := producer.NewPublisher(context.Background(), brokers, "transactions")
-	if err != nil {
-		logger.Log.Fatal().Err(err).Msg("Failed to connect to Kafka broker")
-	}
-	defer pub.Close() // concrete method, no assertion needed
+	// pub, err := producer.NewPublisher(context.Background(), brokers, "transactions")
+	// if err != nil {
+	// 	logger.Log.Fatal().Err(err).Msg("Failed to connect to Kafka broker")
+	// }
+	// defer pub.Close() // concrete method, no assertion needed
 
-	service := transactions.NewService(transactionsRepo, walletClient, txManger, notificationsClient, pub)
+	service := transactions.NewService(transactionsRepo, walletClient, txManger, notificationsClient)
 	// init the controller
 	controller := rest.NewTransactionsController(service)
 
