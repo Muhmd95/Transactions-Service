@@ -815,3 +815,62 @@ func TestEdgeCase_TransferToSelf(t *testing.T) {
 		t.Errorf("Balance should not change on self-transfer! Expected %d, got %d", initialBal, finalBal)
 	}
 }
+
+func TestIsolation_ConcurrentWithdrawalsOnlyOneSucceeds(t *testing.T) {
+	phone := "01027272727"
+	depositAmount := int64(5000)
+	t.Logf("Testing 20 concurrent full-balance withdrawals on wallet %s (only 1 should succeed)", phone)
+
+	// Create a fresh wallet for this test
+	createWallet(t, phone, "Race Withdraw User", "29907071234567")
+
+	// Deposit a known amount so the wallet has exactly depositAmount available
+	status, _ := deposit(t, phone, depositAmount)
+	if status != http.StatusCreated {
+		t.Fatalf("Failed to pre-fund wallet. Got status: %d", status)
+	}
+
+	initialBal := getWalletBalance(t, phone)
+	t.Logf("Initial balance after deposit: %d", initialBal)
+
+	var wg sync.WaitGroup
+	var successes, failures int32
+	concurrency := 20
+
+	// All 20 goroutines try to withdraw the entire balance at once
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s, _ := withdraw(t, phone, initialBal)
+			if s == http.StatusCreated {
+				atomic.AddInt32(&successes, 1)
+			} else {
+				atomic.AddInt32(&failures, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	finalBal := getWalletBalance(t, phone)
+
+	t.Logf("Concurrent withdrawals done. Successes: %d, Failures: %d", successes, failures)
+	t.Logf("Final balance: %d", finalBal)
+
+	// Exactly 1 should succeed
+	if successes != 1 {
+		t.Errorf("Expected exactly 1 successful withdrawal, got %d", successes)
+	}
+
+	// The remaining 19 should have failed
+	if failures != int32(concurrency-1) {
+		t.Errorf("Expected %d failures, got %d", concurrency-1, failures)
+	}
+
+	// Balance should be 0
+	if finalBal != 0 {
+		t.Errorf("Expected final balance 0, got %d", finalBal)
+	}
+}
+
+
