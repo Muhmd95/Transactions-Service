@@ -26,6 +26,7 @@ This document describes the `acid_test.go` integration tests for the Transaction
 | `TestDurability_IdempotentTransfer` | 1 | Verifies retry of successful transfer returns same transaction ID, balance only changes once. |
 | `TestDurability_IdempotentFailedTransfer` | 1 | Verifies retry of failed transfer returns same 422, sender balance unchanged. |
 | `TestEdgeCase_TransferToSelf` | 1 | Ensures transferring to yourself is rejected with 400 Bad Request. |
+| `TestIsolation_ConcurrentWithdrawalsOnlyOneSucceeds` | 20 | Deposits a known amount, then fires 20 concurrent full-balance withdrawals. Exactly 1 must succeed (201), the other 19 must fail with insufficient balance, and the final balance must be 0. |
 
 ## How the Code Works Under the Hood
 Because the Transactions Service enforces a unique sequence number for each wallet transaction, concurrent transactions for the same wallet are serialized. 
@@ -50,7 +51,7 @@ If you run `go test -v -tags=integration -count=1 ./tests/` on a **clean, empty 
 | `01012345678` | Deposit/Withdraw tests + Idempotency + Stress | ~78 records |
 | `01112345678` | Setup deposit + 20 concurrent withdrawals | ~21 records |
 | `01212345678` | Setup deposit + 40 concurrent mixed ops | ~41 records |
-| `01512345678` | Max capacity setup deposit | 1 record |
+| `01512345678` | Max capacity setup deposit + concurrent withdrawal race | ~3 records |
 | `01055555555` | Sender: setup + transfers + concurrent + failed (FAILED status records included) | Variable (~28+) |
 | `01166666666` | Receiver: transfer deposits + max capacity setup/reset | Variable (~28+) |
 
@@ -63,6 +64,6 @@ If you run `go test -v -tags=integration -count=1 ./tests/` on a **clean, empty 
 | `01012345678` | `0` | +1000 (Atomicity) <br> +3500 (Sequential) <br> +2000 (Concurrent Deposits) <br> +150 (Wallet Idempotency) <br> +300 (Tx Idempotency) <br> +100 (Concurrent Idempotency) <br> +500 (Stress 50) | **7,550** |
 | `01112345678` | `0` | +10000 (Setup) <br> -2000 (Concurrent Withdrawals) | **8,000** |
 | `01212345678` | `0` | +50000 (Setup) <br> +2000 (Concurrent Mixed) <br> -2000 (Concurrent Mixed) | **50,000** |
-| `01512345678` | `0` | +9000000000000000 (Max Capacity Setup) | **9,000,000,000,000,000** |
+| `01512345678` | `0` | +9000000000000000 (Max Capacity Setup) <br> +5000 (Concurrent Race Deposit) <br> -5000 (1 Successful Withdrawal) | **9,000,000,000,000,000** |
 | `01055555555` | `0` | +50000 (Setup) <br> -500 (Atomicity) <br> +0 (Insufficient Fail) <br> +0 (Max Capacity Fail, sender gets FAILED tx) <br> +5000 (Concurrent Setup) <br> -1000 (Concurrent 20×50) <br> -100 (Idempotent Transfer) <br> +0 (Idempotent Failed Transfer) <br> +0 (Self-Transfer Reject) | **53,400** |
 | `01166666666` | `0` | +500 (Atomicity) <br> +0 (Insufficient Fail) <br> +0 (Max Capacity resets to 0) <br> +1000 (Concurrent 20×50) <br> +100 (Idempotent Transfer) <br> +0 (Idempotent Failed resets to 0) | **1,600** |
