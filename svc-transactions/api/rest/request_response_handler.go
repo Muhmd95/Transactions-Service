@@ -7,8 +7,8 @@ import (
 
 	// paths from project root:
 	"svc-transactions/internal/transactions"
-	"svc-transactions/util/logger"
 	"svc-transactions/util/common"
+	"svc-transactions/util/logger"
 )
 
 // DepositHandler handles processing deposit transactions.
@@ -129,8 +129,6 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-
-
 	var reqData transactions.WithdrawalRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -167,7 +165,7 @@ func (c *TransactionsController) WithdrawHandler(w http.ResponseWriter, r *http.
 		} else if errors.Is(err, transactions.ErrHighFrequencyTransaction) {
 			respondWithError(w, http.StatusTooManyRequests, err.Error())
 			return
-		}	
+		}
 		respondWithError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}

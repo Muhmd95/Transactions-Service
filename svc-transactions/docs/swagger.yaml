@@ -7,8 +7,6 @@ definitions:
       phone_number:
         description: ReferenceID string `json:"reference_id"`
         type: string
-      reference_id:
-        type: string
     type: object
   transactions.DepositResponse:
     properties:
@@ -29,17 +27,15 @@ definitions:
         type: integer
       receiver_phone:
         type: string
-      reference_id:
-        type: string
       sender_phone:
         description: "ReferenceID \tstring \t`json:\"reference_id\"`"
         type: string
     type: object
   transactions.TransferResponse:
     properties:
-      sender_balance:
+      balance_after:
         type: integer
-      sender_balance_before:
+      balance_before:
         type: integer
       sender_wallet_id:
         type: string
@@ -54,8 +50,6 @@ definitions:
         type: integer
       phone_number:
         description: ReferenceID string `json:"reference_id"`
-        type: string
-      reference_id:
         type: string
     type: object
   transactions.WithdrawalResponse:

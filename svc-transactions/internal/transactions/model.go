@@ -25,13 +25,13 @@ type Transaction struct {
 	ID primitive.ObjectID `bson:"_id,omitempty"`
 
 	//referece id is a string to prevent idempotency
-	ReferenceID 	string 	 		`bson:"reference_id"`
-	AssociatedRef 	string 	 		`bson:"associated_ref,omitempty"` // this is the reference id of the other transaction in case of transfer,
+	ReferenceID   string `bson:"reference_id"`
+	AssociatedRef string `bson:"associated_ref,omitempty"` // this is the reference id of the other transaction in case of transfer,
 	//  it will be empty for deposit and withdraw
-	PhoneNumber string 	 	`bson:"phone_number"`
+	PhoneNumber string `bson:"phone_number"`
 
 	// empty if the transaction is deposit or withdraw
-	SenderPhone   string `bson:"sender_phone,omitEmpty"` 
+	SenderPhone   string `bson:"sender_phone,omitEmpty"`
 	ReceiverPhone string `bson:"receiver_phone,omitEmpty"`
 
 	Type   TransactionType   `bson:"type"`
@@ -44,7 +44,7 @@ type Transaction struct {
 	BalanceBefore int64  `bson:"balance_before"`
 	BalanceAfter  int64  `bson:"balance_after"`
 	SeqNumber     int64  `bson:"sequence_number"`
-	
+
 	//CurrencyCode string `bson:"currency_code"`
 
 	FailedReason string    `bson:"failed_reason,omitempty"`
@@ -63,16 +63,15 @@ var (
 	ErrExceedsMaxBalance   = errors.New("deposit exceeds maximum wallet capacity")
 	// errors related  to transaction
 	//ErrDuplicateReferenceID   = errors.New("transaction with the same reference ID already exists")
-	
-	ErrFirstTransaction = errors.New("first transaction insertion")
-	ErrDuplicateSequence = errors.New("duplicate sequence number")
-	ErrDuplicateReferenceID = errors.New("duplicate reference ID")
+
+	ErrFirstTransaction         = errors.New("first transaction insertion")
+	ErrDuplicateSequence        = errors.New("duplicate sequence number")
+	ErrDuplicateReferenceID     = errors.New("duplicate reference ID")
 	ErrInvalidTransactionStatus = errors.New("invalid transaction status")
-	ErrTransactionNotFound = errors.New("transaction not found")
+	ErrTransactionNotFound      = errors.New("transaction not found")
 	ErrHighFrequencyTransaction = errors.New("high frequency of transactions detected, please try again later")
-	ErrHalfTransferFail = errors.New("Receiver could not accept the transfer")
+	ErrHalfTransferFail         = errors.New("Receiver could not accept the transfer")
 )
 
 // wallet max
 const WalletMax int64 = 9000000000000000
-

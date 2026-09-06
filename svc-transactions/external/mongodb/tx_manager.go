@@ -15,7 +15,7 @@ func NewTransactionsTxManager(clt *mongo.Client) transactions.TxManager {
 	return &mongoTxManager{client: clt}
 }
 
-func (t *mongoTxManager) WithTransaction(ctx context.Context, fn func(ctx context.Context) error ) error {
+func (t *mongoTxManager) WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
 	// start a new session
 	session, err := t.client.StartSession()
 	if err != nil {
@@ -28,7 +28,7 @@ func (t *mongoTxManager) WithTransaction(ctx context.Context, fn func(ctx contex
 		// because mongo session context implements the context interface the fn takes it
 		err := fn(sessCtx)
 
-		// return the error from my fn 
+		// return the error from my fn
 		// fn returns nil if success then the with transction commit the transantion
 		// else it retry it or abort
 		// if duplicate documen t will handle it in the for loop of service
