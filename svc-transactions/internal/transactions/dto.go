@@ -6,19 +6,16 @@ import (
 )
 
 type DepositRequest struct {
-	//ReferenceID string `json:"reference_id"`
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
 }
 
 type WithdrawalRequest struct {
-	//ReferenceID string `json:"reference_id"`
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
 }
 
 type TransferRequest struct {
-	//ReferenceID 	string 	`json:"reference_id"`
 	SenderPhoneNumber   string `json:"sender_phone"`
 	ReceiverPhoneNumber string `json:"receiver_phone"`
 	Amount              int64  `json:"amount"`
@@ -51,7 +48,7 @@ type TransferResponse struct {
 	SenderBalanceBefore int64              `json:"balance_before"`
 }
 
-// client DTOs
+// wallet client dtos
 type WalletModifyBalanceRequest struct {
 	PhoneNumber string `json:"phone_number"`
 	Amount      int64  `json:"amount"`
@@ -74,49 +71,50 @@ type GetWalletResponse struct {
 	OwnerName string
 }
 
-type CreateSMSNotificationRequest struct {
-	PhoneNumber   string
-	Message       string
-	TransactionID string
-	WalletID      string
-	Amount        int64
-	Balance       int64
-	CreatedAt     time.Time
-}
+// notifications client dtos phase 3
+// type CreateSMSNotificationRequest struct {
+// 	PhoneNumber   string
+// 	Message       string
+// 	TransactionID string
+// 	WalletID      string
+// 	Amount        int64
+// 	Balance       int64
+// 	CreatedAt     time.Time
+// }
 
-type CreateSMSNotificationResponse struct {
-	Success        bool
-	NotificationID string
-}
+// type CreateSMSNotificationResponse struct {
+// 	Success        bool
+// 	NotificationID string
+// }
 
-type CreatePushNotificationRequest struct {
-	PhoneNumber   string
-	Message       string
-	TransactionID string
-	WalletID      string
-	Amount        int64
-	Balance       int64
-	CreatedAt     time.Time
-}
-type CreatePushNotificationResponse struct {
-	Success        bool
-	NotificationID string
-}
+// type CreatePushNotificationRequest struct {
+// 	PhoneNumber   string
+// 	Message       string
+// 	TransactionID string
+// 	WalletID      string
+// 	Amount        int64
+// 	Balance       int64
+// 	CreatedAt     time.Time
+// }
+// type CreatePushNotificationResponse struct {
+// 	Success        bool
+// 	NotificationID string
+// }
 
-// kafka dtos
-const (
-	EventWalletCredited = "WALLET_CREDITED"
-	EventWalletDebited  = "WALLET_DEBITED"
-)
+// kafka phase 4 dtos
+// const (
+// 	EventWalletCredited = "WALLET_CREDITED"
+// 	EventWalletDebited  = "WALLET_DEBITED"
+// )
 
-type TransactionEvent struct {
-	EventType          string // "WALLET_CREDITED" | "WALLET_DEBITED"
-	TxnID              string
-	WalletID           string // partition key
-	PhoneNumber        string
-	NationalID         string // for the future will wire the user and their wallets
-	Amount             int64  // amount of the txn
-	BalanceAfter       int64
-	OccurredAt         time.Time // business time when the money moved
-	CoupledPhoneNumber string    // when the transaction is transfer will be put with the sender						// must be checked first in the notifications service
-}
+// type TransactionEvent struct {
+// 	EventType          string // "WALLET_CREDITED" | "WALLET_DEBITED"
+// 	TxnID              string
+// 	WalletID           string // partition key
+// 	PhoneNumber        string
+// 	NationalID         string // for the future will wire the user and their wallets
+// 	Amount             int64  // amount of the txn
+// 	BalanceAfter       int64
+// 	OccurredAt         time.Time // business time when the money moved
+// 	CoupledPhoneNumber string    // when the transaction is transfer will be put with the sender						// must be checked first in the notifications service
+// }

@@ -15,31 +15,26 @@ type WalletClient interface {
 	GetWalletInfo(ctx context.Context, PhoneNumber string) (*GetWalletResponse, error)
 }
 
-type NotificationsClient interface {
-	SendSMSNotification(ctx context.Context, req *CreateSMSNotificationRequest) (*CreateSMSNotificationResponse, error)
-	SendPushNotification(ctx context.Context, req *CreatePushNotificationRequest) (*CreatePushNotificationResponse, error)
-}
-
 // this is a wrapper for the client to handle the transactions
 type TxManager interface {
 	WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
-// for kafka event production
-type EventPublisher interface {
-	PublishTransactionEvent(ctx context.Context, evt *TransactionEvent) error
-}
+// for kafka event production phase 4
+// type EventPublisher interface {
+// 	PublishTransactionEvent(ctx context.Context, evt *TransactionEvent) error
+// }
 
 type Service struct {
-	repo                Repository
-	walletClient        WalletClient
-	notificationsClient NotificationsClient
-	txManager           TxManager
+	repo         Repository
+	walletClient WalletClient
+	// notificationsClient NotificationsClient
+	txManager TxManager
 	// eventPublisher      EventPublisher
 }
 
-func NewService(repo Repository, walletClient WalletClient, txManager TxManager, notificationsClient NotificationsClient) *Service {
-	return &Service{repo: repo, walletClient: walletClient, txManager: txManager, notificationsClient: notificationsClient}
+func NewService(repo Repository, walletClient WalletClient, txManager TxManager) *Service {
+	return &Service{repo: repo, walletClient: walletClient, txManager: txManager}
 }
 
 func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequest, refID string) (*DepositResponse, error) {
@@ -201,38 +196,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 	}
 	log.Info().Msg("Wallet balance has been modified successfully (service layer)")
 
-
-	// grpc notification sender
-	// _, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
-	// 	PhoneNumber:   req.PhoneNumber,
-	// 	Message:       fmt.Sprintf("Your deposit of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
-	// 	TransactionID: NewTransaction.ID.Hex(),
-	// 	WalletID:      walletID,
-	// 	Balance:       newBalance,
-	// 	Amount:        NewTransaction.Amount,
-	// 	CreatedAt:     NewTransaction.CreatedAt,
-	// })
-	// if err != nil {
-	// 	log.Error().Err(err).Str("phone_number", req.PhoneNumber).Msg("Failed to send SMS notification (service layer)")
-	// 	log.Info().Str("phone_number", req.PhoneNumber).Int64("amount", req.Amount).Msg("Queuing SMS notification request to NotificationsService (from service layer)")
-	// }
-
-	// _, err = s.notificationsClient.SendPushNotification(ctx, &CreatePushNotificationRequest{
-	// 	PhoneNumber:   req.PhoneNumber,
-	// 	Message:       fmt.Sprintf("Your deposit of %d has been successfully processed. Your new balance is %d.", NewTransaction.Amount, newBalance),
-	// 	TransactionID: NewTransaction.ID.Hex(),
-	// 	WalletID:      walletID,
-	// 	Balance:       newBalance,
-	// 	Amount:        NewTransaction.Amount,
-	// 	CreatedAt:     NewTransaction.CreatedAt,
-	// })
-	// if err != nil {
-	// 	log.Error().Err(err).Str("phone_number", req.PhoneNumber).Msg("Failed to send push notification (service layer)")
-	// 	log.Info().Str("phone_number", req.PhoneNumber).Int64("amount", req.Amount).Msg("Queuing push notification request to NotificationsService (from service layer)")
-	// }
-
-
-	// kafka event eventPublisher
+	// kafka event eventPublisher phase 4
 	// evt := &TransactionEvent{
 	// 	EventType:    EventWalletCredited,
 	// 	TxnID:        NewTransaction.ID.Hex(),
@@ -414,7 +378,6 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	}
 	log.Info().Msg("Wallet balance has been modified successfully (service layer)")
 
-
 	// grpc notificationsClient
 	// _, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 	// 	PhoneNumber:   req.PhoneNumber,
@@ -441,7 +404,6 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	// 	log.Error().Err(err).Str("phone_number", req.PhoneNumber).Msg("Failed to send push notification (service layer)")
 	// 	log.Info().Str("phone_number", req.PhoneNumber).Int64("amount", req.Amount).Msg("Queuing push notification request to NotificationsService (from service layer)")
 	// }
-
 
 	// kafka event eventPublisher
 	// evt := &TransactionEvent{
@@ -871,8 +833,8 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 	// if err != nil {
 	// 	log.Error().Err(err).Str("wallet_id", newDepositTransaction.WalletID).Msg("Failed to publish transaction event to Kafka (service layer)")
 	// }
-	// log.Info().Msg("Transfer event for receiver has been published successfully to Kafka (service layer)")	
-	
+	// log.Info().Msg("Transfer event for receiver has been published successfully to Kafka (service layer)")
+
 	return &TransferResponse{
 		TransactionID:       newWithdrawalTransaction.ID,
 		SenderWalletID:      newWithdrawalTransaction.WalletID,
