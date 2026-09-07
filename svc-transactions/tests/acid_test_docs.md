@@ -7,7 +7,7 @@ This document describes the `acid_test.go` integration tests for the Transaction
 | Test Name | Concurrency | Purpose |
 |-----------|-------------|---------|
 | `TestSetup_CreateWallets` | 1 | Initializes the wallets required for testing. |
-| `TestAtomicity_Deposit...` | 1 | Verifies that a transaction is posted and the wallet balance is updated synchronously. |
+| `TestAtomicity_Deposit...` | 1 | Verifies that a transaction is posted to the ledger and balance updates propagate to the wallet via CDC. |
 | `TestConsistency_Sequential...` | 1 | Verifies standard sequential math over a series of mixed operations. |
 | `TestIsolation_ConcurrentDeposits...` | 20 | Fires 20 simultaneous deposits. Tests the optimistic concurrency retry loop. |
 | `TestIsolation_ConcurrentWithdrawals...`| 20 | Fires 20 simultaneous withdrawals to ensure balance floors are respected under load. |

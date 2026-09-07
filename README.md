@@ -13,7 +13,7 @@ Key capabilities:
 - **Optimistic Concurrency Control (OCC):** Prevents race conditions and dirty reads under high concurrency using wallet sequence numbers and automated randomized jitter retries.
 - **Atomic Wallet-to-Wallet Transfers:** Executes atomic double-entry bookkeeping (sender debit + receiver credit) within MongoDB ACID sessions.
 - **Strict Idempotency:** Guaranteed through mandatory `Idempotency-Key` headers backed by unique database indexes.
-- **Inter-Service Synchronization:** Synchronizes balances with the **Wallet Service** over **gRPC** using shared protobuf contracts.
+- **Inter-Service Coordination:** Verifies wallet existence via **gRPC** (`GetWallet`) using shared protobuf contracts. Balance synchronization is fully decoupled through the CDC pipeline.
 - **Event-Driven Change Data Capture (CDC):** Integrates with **Kafka Connect** to publish `POSTED` transaction events to Kafka for downstream consumers (e.g. `Notifications Service`).
 - **Distributed Observability:** Full OpenTelemetry tracing (`otelhttp`, `otelgrpc`) and structured logging with Zerolog.
 
@@ -32,7 +32,7 @@ svc-transactions/
 │   │   └── request_response_handler.go # HTTP request binding, validation, & header handling
 ├── client/
 │   ├── wallet/                     # gRPC Client for Wallet Service
-│   │   └── wallet_client.go        # Implements WalletClient interface (ModifyBalance, GetWallet)
+│   │   └── wallet_client.go        # Implements WalletClient interface (GetWallet)
 │   └── notifications/              # Prepared gRPC client for Notifications Service
 │       └── notifications_client.go
 ├── internal/
@@ -73,7 +73,7 @@ svc-transactions/
 | **Transport** | `api/rest` | Validates HTTP payloads and `Idempotency-Key` headers, delegates to domain service, maps domain errors to standard HTTP status codes. |
 | **Domain** | `internal/transactions` | Implements financial business logic, ledger sequencing, overdraft checks, retry loops, and interface definitions. Independent of database drivers. |
 | **Infrastructure** | `external/mongodb` | Executes MongoDB queries, enforces compound unique indexes, and runs multi-document ACID transactions. |
-| **Client** | `client/wallet` | gRPC client calling `WalletService` methods (`ModifyBalance`, `GetWallet`), mapping gRPC status codes to domain errors. |
+| **Client** | `client/wallet` | gRPC client calling `WalletService.GetWallet` for wallet existence verification, mapping gRPC status codes to domain errors. |
 | **Utilities** | `util/common`, `util/logger`, `util/tracer` | Cross-cutting phone validation, structured logging, and OpenTelemetry trace propagation. |
 
 ---
@@ -101,7 +101,9 @@ sequenceDiagram
     actor Client
     participant TX as Transactions Service
     participant DB as MongoDB (transactions_db)
-    participant Wallet as Wallet Service (gRPC)
+    participant KC as Kafka Connect (CDC)
+    participant K as Kafka Broker
+    participant WS as Wallet Service Consumer
 
     Client->>TX: POST /deposit (with Idempotency-Key)
     TX->>DB: Check if reference_id already exists
@@ -120,8 +122,12 @@ sequenceDiagram
                 TX->>TX: Sleep 5ms - 100ms (Random Jitter)
             end
         end
-        TX->>Wallet: gRPC ModifyBalance(phone, amount, refID)
         TX-->>Client: 201 Created (New Transaction Response)
+        Note over DB,WS: Asynchronous CDC Pipeline
+        DB->>KC: Change Stream (insert, status: POSTED)
+        KC->>K: Publish to transactions_db.transactions (key: wallet_id)
+        K->>WS: Consume event
+        WS->>WS: $set balance = balance_after (idempotent)
     end
 ```
 
@@ -145,7 +151,7 @@ When executing a wallet-to-wallet transfer via `POST /v1/transactions/transfer`:
   - Filters for: `operationType: insert` and `fullDocument.status: POSTED`.
   - Publishes events to Kafka topic: `transactions_db.transactions`.
   - Partition key: `wallet_id` (guaranteeing in-order event delivery per wallet).
-- Downstream services (such as `Notifications Service`) consume from this topic asynchronously.
+- Downstream consumers process events asynchronously: the **Wallet Service** updates its balance projection, and the **Notifications Service** dispatches push/SMS alerts.
 
 ---
 
