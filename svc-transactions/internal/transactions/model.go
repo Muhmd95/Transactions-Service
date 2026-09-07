@@ -31,8 +31,8 @@ type Transaction struct {
 	PhoneNumber string `bson:"phone_number"`
 
 	// empty if the transaction is deposit or withdraw
-	SenderPhone   string `bson:"sender_phone,omitEmpty"`
-	ReceiverPhone string `bson:"receiver_phone,omitEmpty"`
+	SenderPhone   string `bson:"sender_phone,omitempty"`
+	ReceiverPhone string `bson:"receiver_phone,omitempty"`
 
 	Type   TransactionType   `bson:"type"`
 	Status TransactionStatus `bson:"status"`
