@@ -174,27 +174,29 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 		return nil, ErrHighFrequencyTransaction
 	}
 
-	// i will handle calling the wallet later
-	clientReq := &WalletModifyBalanceRequest{
-		PhoneNumber: req.PhoneNumber,
-		Amount:      req.Amount,
-		RefID:       NewTransaction.ID.Hex(),
-	}
-	// i dont know when to call this
-	_, err = s.walletClient.WalletModifyBalance(ctx, clientReq)
-	if err != nil {
-		// update the transaction to failed
-		if errors.Is(err, ErrWalletNotFound) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Wallet not found (service layer)")
-		} else if errors.Is(err, ErrInsufficientBalance) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insufficient balance (service layer)")
-		} else if errors.Is(err, ErrExceedsMaxBalance) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
-		} else if errors.Is(err, ErrInvalidPhoneNumber) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
-		}
-	}
-	log.Info().Msg("Wallet balance has been modified successfully (service layer)")
+	// wallet now uses CDC
+
+	// // i will handle calling the wallet later
+	// clientReq := &WalletModifyBalanceRequest{
+	// 	PhoneNumber: req.PhoneNumber,
+	// 	Amount:      req.Amount,
+	// 	RefID:       NewTransaction.ID.Hex(),
+	// }
+	// // i dont know when to call this
+	// _, err = s.walletClient.WalletModifyBalance(ctx, clientReq)
+	// if err != nil {
+	// 	// update the transaction to failed
+	// 	if errors.Is(err, ErrWalletNotFound) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Wallet not found (service layer)")
+	// 	} else if errors.Is(err, ErrInsufficientBalance) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insufficient balance (service layer)")
+	// 	} else if errors.Is(err, ErrExceedsMaxBalance) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
+	// 	} else if errors.Is(err, ErrInvalidPhoneNumber) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
+	// 	}
+	// }
+	// log.Info().Msg("Wallet balance has been modified successfully (service layer)")
 
 	// kafka event eventPublisher phase 4
 	// evt := &TransactionEvent{
@@ -358,25 +360,27 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 		return nil, ErrHighFrequencyTransaction
 	}
 
-	clientReq := &WalletModifyBalanceRequest{
-		PhoneNumber: req.PhoneNumber,
-		Amount:      -req.Amount,
-		RefID:       NewTransaction.ID.Hex(),
-	}
+	// wallet now uses kafka coinnect
 
-	_, err = s.walletClient.WalletModifyBalance(ctx, clientReq)
-	if err != nil {
-		if errors.Is(err, ErrWalletNotFound) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Wallet not found (service layer)")
-		} else if errors.Is(err, ErrInsufficientBalance) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insufficient balance (service layer)")
-		} else if errors.Is(err, ErrExceedsMaxBalance) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
-		} else if errors.Is(err, ErrInvalidPhoneNumber) {
-			log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
-		}
-	}
-	log.Info().Msg("Wallet balance has been modified successfully (service layer)")
+	// clientReq := &WalletModifyBalanceRequest{
+	// 	PhoneNumber: req.PhoneNumber,
+	// 	Amount:      -req.Amount,
+	// 	RefID:       NewTransaction.ID.Hex(),
+	// }
+
+	// _, err = s.walletClient.WalletModifyBalance(ctx, clientReq)
+	// if err != nil {
+	// 	if errors.Is(err, ErrWalletNotFound) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Wallet not found (service layer)")
+	// 	} else if errors.Is(err, ErrInsufficientBalance) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Insufficient balance (service layer)")
+	// 	} else if errors.Is(err, ErrExceedsMaxBalance) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
+	// 	} else if errors.Is(err, ErrInvalidPhoneNumber) {
+	// 		log.Warn().Err(err).Str("phone_number", req.PhoneNumber).Msg("Invalid phone number format (service layer)")
+	// 	}
+	// }
+	// log.Info().Msg("Wallet balance has been modified successfully (service layer)")
 
 	// grpc notificationsClient
 	// _, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
@@ -710,43 +714,45 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 		return nil, ErrHalfTransferFail // i return an error but i save the transaction
 	}
 
-	clientReqWithdrawal := &WalletModifyBalanceRequest{
-		PhoneNumber: req.SenderPhoneNumber,
-		Amount:      -req.Amount,
-		RefID:       newWithdrawalTransaction.ID.Hex(),
-	}
+	// clientReqWithdrawal := &WalletModifyBalanceRequest{
+	// 	PhoneNumber: req.SenderPhoneNumber,
+	// 	Amount:      -req.Amount,
+	// 	RefID:       newWithdrawalTransaction.ID.Hex(),
+	// }
 
-	clientReqDeposit := &WalletModifyBalanceRequest{
-		PhoneNumber: req.ReceiverPhoneNumber,
-		Amount:      req.Amount,
-		RefID:       newDepositTransaction.ID.Hex(),
-	}
+	// clientReqDeposit := &WalletModifyBalanceRequest{
+	// 	PhoneNumber: req.ReceiverPhoneNumber,
+	// 	Amount:      req.Amount,
+	// 	RefID:       newDepositTransaction.ID.Hex(),
+	// }
 
-	// tell the wallet to modify the sender balance
-	_, err = s.walletClient.WalletModifyBalance(ctx, clientReqWithdrawal)
-	if err != nil { // all these errors wont be done anyway
-		if errors.Is(err, ErrWalletNotFound) {
-			log.Warn().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Wallet not found (service layer)")
-		} else if errors.Is(err, ErrInsufficientBalance) {
-			log.Warn().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Insufficient balance (service layer)")
-		} else if errors.Is(err, ErrInvalidPhoneNumber) {
-			log.Warn().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Invalid phone number format (service layer)")
-		}
-	}
-	log.Info().Msg("Sender wallet balance has been modified successfully (service layer)")
+	// wallet uses kafka-connect and modfies according to the CDC
 
-	// tell the wallet to modify the receiver balance
-	_, err = s.walletClient.WalletModifyBalance(ctx, clientReqDeposit)
-	if err != nil { // all these errors wont be done anyway
-		if errors.Is(err, ErrWalletNotFound) {
-			log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Wallet not found (service layer)")
-		} else if errors.Is(err, ErrExceedsMaxBalance) {
-			log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
-		} else if errors.Is(err, ErrInvalidPhoneNumber) {
-			log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Invalid phone number format (service layer)")
-		}
-	}
-	log.Info().Msg("Receiver wallet balance has been modified successfully (service layer)")
+	// // tell the wallet to modify the sender balance
+	// _, err = s.walletClient.WalletModifyBalance(ctx, clientReqWithdrawal)
+	// if err != nil { // all these errors wont be done anyway
+	// 	if errors.Is(err, ErrWalletNotFound) {
+	// 		log.Warn().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Wallet not found (service layer)")
+	// 	} else if errors.Is(err, ErrInsufficientBalance) {
+	// 		log.Warn().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Insufficient balance (service layer)")
+	// 	} else if errors.Is(err, ErrInvalidPhoneNumber) {
+	// 		log.Warn().Err(err).Str("phone_number", req.SenderPhoneNumber).Msg("Invalid phone number format (service layer)")
+	// 	}
+	// }
+	// log.Info().Msg("Sender wallet balance has been modified successfully (service layer)")
+
+	// // tell the wallet to modify the receiver balance
+	// _, err = s.walletClient.WalletModifyBalance(ctx, clientReqDeposit)
+	// if err != nil { // all these errors wont be done anyway
+	// 	if errors.Is(err, ErrWalletNotFound) {
+	// 		log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Wallet not found (service layer)")
+	// 	} else if errors.Is(err, ErrExceedsMaxBalance) {
+	// 		log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Deposit exceeds maximum wallet capacity (service layer)")
+	// 	} else if errors.Is(err, ErrInvalidPhoneNumber) {
+	// 		log.Warn().Err(err).Str("phone_number", req.ReceiverPhoneNumber).Msg("Invalid phone number format (service layer)")
+	// 	}
+	// }
+	// log.Info().Msg("Receiver wallet balance has been modified successfully (service layer)")
 	// // notify the sender about the transfer
 	// _, err = s.notificationsClient.SendSMSNotification(ctx, &CreateSMSNotificationRequest{
 	// 	PhoneNumber:   req.SenderPhoneNumber,
