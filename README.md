@@ -286,6 +286,127 @@ docker run -p 8080:8080 \
   svc-transactions
 ```
 
+### Run the Full Stack with Docker Compose
+
+The Transactions Service rarely runs alone — it needs the Wallet Service (gRPC) and the Kafka CDC pipeline (Kafka broker + Kafka Connect) for balance propagation. The workspace root contains a `docker-compose.yml` that wires the entire platform. Snapshot (source of truth is the root file):
+
+```yaml
+services:
+   # 1. Wallet Service
+   wallet:
+      build:
+         context: ./Wallet-Service/svc-wallet
+         dockerfile: Dockerfile
+      container_name: svc-wallet
+      ports:
+         - "8000:8000"   # REST
+         - "50051:50051" # gRPC
+      env_file:
+         - ./Wallet-Service/svc-wallet/.ENV
+      environment:
+         - MONGO_DB_NAME=wallet_db
+      depends_on:
+          kafka:
+            condition: service_healthy
+
+   notifications:
+      build:
+         context: ./Notifications-Service/svc-notifications
+         dockerfile: Dockerfile
+      container_name: svc-notifications
+      ports:
+         - "50050:50050" # gRPC
+      env_file:
+         - ./Notifications-Service/svc-notifications/.ENV
+      environment:
+         - MONGO_DB_NAME=notifications_db
+      depends_on:
+          kafka:
+             condition: service_healthy
+
+   # 2. Transactions Service
+   transactions:
+      build:
+         context: ./Transactions-Service/svc-transactions
+         dockerfile: Dockerfile
+      container_name: svc-transactions
+      ports:
+         - "8080:8080"
+      env_file:
+         - ./Transactions-Service/svc-transactions/.ENV
+      environment:
+         - MONGO_DB_NAME=transactions_db
+         - WALLET_GRPC_URL=wallet:50051       # overrides .ENV: Docker-network hostname
+         - NOTIFICATIONS_GRPC_URL=notifications:50050
+      depends_on:
+          wallet:
+             condition: service_started
+          kafka:
+             condition: service_healthy
+
+   # 3. Kafka broker (KRaft single node)
+   kafka:
+      image: confluentinc/cp-kafka:7.5.16
+      container_name: kafka
+      ports:
+         - "9092:9092"
+      environment:
+         # --- identity ---
+         KAFKA_NODE_ID: 1
+         CLUSTER_ID: PmpxxUOgTwGMAc6rfUlfnw
+         # --- KRaft roles ---
+         KAFKA_PROCESS_ROLES: broker,controller
+         KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29092
+         KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+         # --- networking ---
+         KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29092
+         KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+         KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+         KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+         # --- misc dev settings ---
+         KAFKA_NUM_PARTITIONS: 3
+         KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+         KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+         KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+         KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      volumes:
+         - kafka-data:/var/lib/kafka/data
+      healthcheck:
+         test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+         interval: 10s
+         timeout: 10s
+         retries: 5
+
+   # 4. Kafka Connect worker (standalone) — CDC from MongoDB via change streams
+   connect:
+      build:
+         context: ./kafka-connect
+         dockerfile: Dockerfile
+      container_name: kafka-connect
+      depends_on:
+         kafka:
+            condition: service_healthy
+      volumes:
+         - ./kafka-connect/worker.properties:/etc/kafka/worker.properties:ro
+         - ./kafka-connect/mongo-source.properties:/etc/kafka/mongo-source.properties:ro
+         - connect-data:/var/lib/connect/data # resume token survives container recreation
+      entrypoint: ["bash", "-c", "connect-standalone /etc/kafka/worker.properties /etc/kafka/mongo-source.properties"]
+
+volumes:
+   kafka-data:
+   connect-data:
+```
+
+```bash
+# from the workspace root (E:\Wallet & Transactions)
+docker compose up -d --build   # --build: compose never rebuilds changed code on its own
+docker compose ps              # wait for kafka (healthy) and services to start
+```
+
+Notes:
+- Each service reads its secrets (`MONGO_URI`, `KAFKA_BROKERS`, ...) from its own `.ENV` file via `env_file`; the `environment:` entries only override DB names and Docker-network hostnames.
+- The `transactions_db` → Kafka CDC pipeline is what keeps wallet balances in sync; without `kafka` + `connect` running, deposits succeed but wallet balances never update.
+
 ---
 
 ## 🧪 ACID & Concurrency Testing
