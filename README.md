@@ -290,16 +290,21 @@ docker run -p 8080:8080 \
 
 ## 🧪 ACID & Concurrency Testing
 
-The repository contains an exhaustive integration test suite (`acid_test.go`) validating:
+The repository contains an exhaustive integration test suite (`acid_test.go`, behind the `//go:build integration` tag) validating:
 - **Atomicity:** Partial operations roll back completely.
 - **Consistency:** Balance math remains 100% accurate under mixed deposit/withdraw/transfer operations.
 - **Isolation:** 20–50 simultaneous concurrent requests per wallet resolve cleanly via OCC retry loop without race conditions or lost updates.
-- **Durability:** Repeated requests with the same `Idempotency-Key` return identical responses without duplicate balance mutations.
+- **Durability:** Repeated requests with the same `Idempotency-Key` return identical responses (same `transaction_id`, same balance) without duplicate balance mutations.
+
+Assertions are **ledger-first**: balance checks read the synchronous Transactions Service response (the ledger's `balance` / `balance_after`), and every test ends with a CDC convergence check (`waitForBalance`) that polls the Wallet Service until the balance projection catches up — so the suite also verifies the Kafka Connect pipeline end-to-end.
 
 ```bash
+# requires the live stack: Wallet (:8000) + Transactions (:8080) + Kafka/Connect/wallet consumer
 cd Transactions-Service/svc-transactions
-go test -v -tags=integration -count=1 ./tests/
+go test -v -tags=integration -count=1 -timeout 600s ./tests/
 ```
+
+CI runs plain `go test ./...` and skips this suite (it needs live services).
 
 *For comprehensive test flow breakdowns and database ledger validation tables, see [acid_test_docs.md](tests/acid_test_docs.md).*
 

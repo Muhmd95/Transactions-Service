@@ -36,4 +36,4 @@ jobs:
         run: go build -v ./... #this builds the whole project
 
       - name: Run Tests
-        run: go test -v ./... #no test files for now
+        run: go test -v ./... # integration tests are behind the "integration" build tag (need the live stack) and are skipped here
