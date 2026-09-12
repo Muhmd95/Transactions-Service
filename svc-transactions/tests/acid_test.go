@@ -89,38 +89,8 @@ func createWallet(t *testing.T, phone, name, nationalID string) string {
 	return ""
 }
 
-func getWalletBalance(t *testing.T, phone string) int64 {
-	req, _ := http.NewRequest(http.MethodGet, WalletSvcURL+"/v1/wallet/phone/"+phone, nil)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		t.Fatalf("Failed to get wallet: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Unexpected status getting wallet: %d", resp.StatusCode)
-	}
-
-	respBody, _ := io.ReadAll(resp.Body)
-	var data map[string]interface{}
-	if err := json.Unmarshal(respBody, &data); err != nil {
-		t.Fatalf("Failed to unmarshal wallet response: %v", err)
-	}
-
-	balanceVal, ok := data["balance"]
-	if !ok {
-		t.Fatalf("balance field missing from response: %s", string(respBody))
-	}
-
-	balanceFloat, ok := balanceVal.(float64)
-	if !ok {
-		t.Fatalf("balance is not a number. Got type %T, value: %v", balanceVal, balanceVal)
-	}
-
-	return int64(balanceFloat)
-}
-
-// getWalletBalanceSoft is a non-fatal read used by waitForBalance.
+// getWalletBalanceSoft is a non-fatal read used by waitForBalance and the
+// balanceBefore helpers.
 func getWalletBalanceSoft(phone string) (int64, bool) {
 	req, err := http.NewRequest(http.MethodGet, WalletSvcURL+"/v1/wallet/phone/"+phone, nil)
 	if err != nil {
@@ -149,21 +119,54 @@ func getWalletBalanceSoft(phone string) (int64, bool) {
 	return int64(balanceFloat), true
 }
 
+// logBalanceBefore prints the starting balance of each wallet under test,
+// read from the Wallet Service immediately before the observation window
+// opens — the suite guarantees the wallet projection has converged by then,
+// so the value equals the ledger state at test start. Prints "?" when the
+// wallet does not exist yet (clean database, first run).
+func logBalanceBefore(t *testing.T, phones ...string) {
+	t.Helper()
+	for _, p := range phones {
+		if bal, ok := getWalletBalanceSoft(p); ok {
+			t.Logf(" balance_before : %s = %d", p, bal)
+		} else {
+			t.Logf(" balance_before : %s = ?", p)
+		}
+	}
+}
+
+// mustBalanceBefore is logBalanceBefore for a single wallet whose starting
+// balance the test needs: it logs the value and returns it, failing the test
+// if the wallet is not readable. Like logBalanceBefore it must be called
+// BEFORE beginObs so the read stays outside the observation.
+func mustBalanceBefore(t *testing.T, phone string) int64 {
+	t.Helper()
+	bal, ok := getWalletBalanceSoft(phone)
+	if !ok {
+		t.Fatalf("wallet %s not readable before test", phone)
+	}
+	t.Logf(" balance_before : %s = %d", phone, bal)
+	return bal
+}
+
 // waitForBalance polls until the wallet (CDC projection of the ledger)
 // converges to the expected balance, or fails the test on timeout.
 func waitForBalance(t *testing.T, phone string, want int64) {
 	t.Helper()
-	deadline := time.Now().Add(convergeTimeout)
+	started := time.Now()
+	deadline := started.Add(convergeTimeout)
 	lastSeen, seen := int64(0), false
 	for time.Now().Before(deadline) {
 		if bal, ok := getWalletBalanceSoft(phone); ok {
 			lastSeen, seen = bal, true
 			if bal == want {
+				recordConverge(phone, want, time.Since(started), true, lastSeen)
 				return
 			}
 		}
 		time.Sleep(convergePoll)
 	}
+	recordConverge(phone, want, time.Since(started), false, lastSeen)
 	t.Errorf("wallet %s did not converge to %d (last seen %d, seen=%v) within %s — CDC lag or dropped event",
 		phone, want, lastSeen, seen, convergeTimeout)
 }
@@ -200,11 +203,15 @@ func deposit(t *testing.T, phone string, amount int64, keys ...string) (int, map
 	}
 	req.Header.Set("Idempotency-Key", idemKey)
 
+	sent := time.Now()
 	resp, err := httpClient.Do(req)
+	done := time.Now()
 	if err != nil {
+		recordReq(0, sent, done)
 		t.Errorf("Failed to deposit: %v", err)
 		return 0, nil
 	}
+	recordReq(resp.StatusCode, sent, done)
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
@@ -230,11 +237,15 @@ func withdraw(t *testing.T, phone string, amount int64, keys ...string) (int, ma
 	}
 	req.Header.Set("Idempotency-Key", idemKey)
 
+	sent := time.Now()
 	resp, err := httpClient.Do(req)
+	done := time.Now()
 	if err != nil {
+		recordReq(0, sent, done)
 		t.Errorf("Failed to withdraw: %v", err)
 		return 0, nil
 	}
+	recordReq(resp.StatusCode, sent, done)
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
@@ -261,11 +272,15 @@ func transfer(t *testing.T, senderPhone, receiverPhone string, amount int64, key
 	}
 	req.Header.Set("Idempotency-Key", idemKey)
 
+	sent := time.Now()
 	resp, err := httpClient.Do(req)
+	done := time.Now()
 	if err != nil {
+		recordReq(0, sent, done)
 		t.Errorf("Failed to transfer: %v", err)
 		return 0, nil
 	}
+	recordReq(resp.StatusCode, sent, done)
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(resp.Body)
@@ -276,19 +291,19 @@ func transfer(t *testing.T, senderPhone, receiverPhone string, amount int64, key
 }
 
 func TestSetup_CreateWallets(t *testing.T) {
-	t.Log("Setting up 3 wallets...")
+	o := beginObs(t, "type: SETUP | creates 4 wallets: 01012345678, 01112345678, 01212345678, 01512345678 (no-op if they exist)")
+	defer o.report(t)
 	createWallet(t, "01012345678", "User One", "29901011234567")
 	createWallet(t, "01112345678", "User Two", "29902021234567")
 	createWallet(t, "01212345678", "User Three", "29903031234567")
 	createWallet(t, "01512345678", "User Four", "29904041234567")
-	t.Log("Wallets created successfully.")
 }
 
 func TestAtomicity_DepositCreatesTransactionAndUpdatesWallet(t *testing.T) {
 	phone := "01012345678"
-	t.Logf("Testing atomicity for wallet %s", phone)
-
-	initialBal := getWalletBalance(t, phone)
+	initialBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: 1x DEPOSIT 1000 | expect: 201 POSTED, balance+1000", phone))
+	defer o.report(t)
 
 	status, data := deposit(t, phone, 1000)
 	if status != http.StatusCreated {
@@ -306,14 +321,13 @@ func TestAtomicity_DepositCreatesTransactionAndUpdatesWallet(t *testing.T) {
 	}
 
 	waitForBalance(t, phone, initialBal+1000)
-	t.Logf("Final balance: %d", initialBal+1000)
 }
 
 func TestConsistency_SequentialDepositsAndWithdrawals(t *testing.T) {
 	phone := "01012345678"
-	t.Logf("Testing sequential consistency for wallet %s", phone)
-
-	initialBal := getWalletBalance(t, phone)
+	initialBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: DEPOSIT 5000, WITHDRAW 2000, DEPOSIT 1000, WITHDRAW 500 (sequential) | expect: net +3500", phone))
+	defer o.report(t)
 
 	s1, d1 := deposit(t, phone, 5000)
 	if s1 != http.StatusCreated {
@@ -357,14 +371,13 @@ func TestConsistency_SequentialDepositsAndWithdrawals(t *testing.T) {
 	}
 
 	waitForBalance(t, phone, expectedFinal)
-	t.Logf("Final balance: %d", expectedFinal)
 }
 
 func TestIsolation_ConcurrentDepositsOnSameWallet(t *testing.T) {
 	phone := "01012345678"
-	t.Logf("Testing 20 concurrent deposits for wallet %s", phone)
-
-	initialBal := getWalletBalance(t, phone)
+	initialBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: 20x concurrent DEPOSIT 100 | expect: baseline+successes*100", phone))
+	defer o.report(t)
 
 	var wg sync.WaitGroup
 	var successes, failures int32
@@ -393,7 +406,6 @@ func TestIsolation_ConcurrentDepositsOnSameWallet(t *testing.T) {
 
 	expectedBal := initialBal + int64(successes)*100
 
-	t.Logf("Concurrent deposits done. Successes: %d, Failures: %d", successes, failures)
 	if len(ledgerBalances) > 0 && slices.Max(ledgerBalances) != expectedBal {
 		t.Errorf("Ledger mismatch! Max ledger balance %d != expected %d", slices.Max(ledgerBalances), expectedBal)
 	}
@@ -401,9 +413,11 @@ func TestIsolation_ConcurrentDepositsOnSameWallet(t *testing.T) {
 	waitForBalance(t, phone, expectedBal)
 }
 
-func TestIsolation_ConcurrentWithdrawalsOnSameWallet(t *testing.T) {
+func TestIsolation_50ConcurrentWithdrawalsOnSameWallet(t *testing.T) {
 	phone := "01112345678"
-	t.Logf("Testing 20 concurrent withdrawals for wallet %s", phone)
+	logBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | setup: 1x DEPOSIT 10000 | ops: 50x concurrent WITHDRAW 100 | expect: baseline-successes*100", phone))
+	defer o.report(t)
 
 	// Fund the wallet and take the ledger baseline from the response
 	// (synchronous), not from a wallet read (eventually consistent).
@@ -418,7 +432,7 @@ func TestIsolation_ConcurrentWithdrawalsOnSameWallet(t *testing.T) {
 
 	var wg sync.WaitGroup
 	var successes, failures int32
-	concurrency := 20
+	concurrency := 50
 	var mu sync.Mutex
 	ledgerBalances := make([]int64, 0, concurrency)
 
@@ -443,7 +457,6 @@ func TestIsolation_ConcurrentWithdrawalsOnSameWallet(t *testing.T) {
 
 	expectedBal := baselineBal - int64(successes)*100
 
-	t.Logf("Concurrent withdrawals done. Successes: %d, Failures: %d", successes, failures)
 	if len(ledgerBalances) > 0 && slices.Min(ledgerBalances) != expectedBal {
 		t.Errorf("Ledger mismatch! Min ledger balance %d != expected %d", slices.Min(ledgerBalances), expectedBal)
 	}
@@ -453,7 +466,9 @@ func TestIsolation_ConcurrentWithdrawalsOnSameWallet(t *testing.T) {
 
 func TestIsolation_ConcurrentMixedOperationsOnSameWallet(t *testing.T) {
 	phone := "01212345678"
-	t.Logf("Testing concurrent mixed operations (20 deposits, 20 withdrawals) for wallet %s", phone)
+	logBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | setup: 1x DEPOSIT 50000 | ops: 20x concurrent DEPOSIT 100 + 20x concurrent WITHDRAW 100 | expect: baseline+net", phone))
+	defer o.report(t)
 
 	s0, d0 := deposit(t, phone, 50000)
 	if s0 != http.StatusCreated {
@@ -497,16 +512,15 @@ func TestIsolation_ConcurrentMixedOperationsOnSameWallet(t *testing.T) {
 
 	expectedBal := baselineBal + int64(dSucc)*100 - int64(wSucc)*100
 
-	t.Logf("Mixed done. Dep Succ: %d, Fail: %d. W/D Succ: %d, Fail: %d", dSucc, dFail, wSucc, wFail)
-
 	waitForBalance(t, phone, expectedBal)
 }
 
 func TestDurability_IdempotencyOnTransactionService(t *testing.T) {
 	phone := "01012345678"
-	t.Logf("Testing idempotency directly on Transactions Service for wallet %s", phone)
+	initialBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: 2x DEPOSIT 300, same idem-key | expect: 1 POST, same tx_id, balance+300", phone))
+	defer o.report(t)
 
-	initialBal := getWalletBalance(t, phone)
 	idempotencyKey := fmt.Sprintf("tx-idem-%d", time.Now().UnixNano())
 
 	// First request
@@ -536,14 +550,14 @@ func TestDurability_IdempotencyOnTransactionService(t *testing.T) {
 	}
 
 	waitForBalance(t, phone, initialBal+300)
-	t.Logf("Final balance: %d (Transactions Idempotency intact)", initialBal+300)
 }
 
 func TestIsolation_ConcurrentIdempotentRequests(t *testing.T) {
 	phone := "01012345678"
-	t.Logf("Stress testing 20 concurrent identical idempotency requests for wallet %s", phone)
+	initialBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: 20x concurrent DEPOSIT 100, same idem-key | expect: 1 POST only, balance+100", phone))
+	defer o.report(t)
 
-	initialBal := getWalletBalance(t, phone)
 	idempotencyKey := fmt.Sprintf("tx-idem-concurrent-%d", time.Now().UnixNano())
 
 	var wg sync.WaitGroup
@@ -580,8 +594,6 @@ func TestIsolation_ConcurrentIdempotentRequests(t *testing.T) {
 	// Only ONE of the 20 should have actually processed the math
 	expectedBal := initialBal + 100
 
-	t.Logf("Concurrent idempotency test done. Successes (200/201): %d, Failures: %d", successes, failures)
-
 	if len(txIDs) > 1 {
 		for _, id := range txIDs[1:] {
 			if id != txIDs[0] {
@@ -602,9 +614,9 @@ func TestIsolation_ConcurrentIdempotentRequests(t *testing.T) {
 
 func TestEdgeCase_WithdrawMoreThanBalance(t *testing.T) {
 	phone := "01512345678" // Wallet might have balance from previous runs
-	t.Logf("Testing withdraw > balance on wallet %s", phone)
-
-	currentBal := getWalletBalance(t, phone)
+	currentBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: 1x WITHDRAW balance+100 | expect: 4xx reject, balance unchanged", phone))
+	defer o.report(t)
 
 	status, data := withdraw(t, phone, currentBal+100)
 	if status != http.StatusBadRequest && status != http.StatusUnprocessableEntity && status != http.StatusInternalServerError {
@@ -619,7 +631,9 @@ func TestEdgeCase_WithdrawMoreThanBalance(t *testing.T) {
 
 func TestEdgeCase_DepositExceedsMax(t *testing.T) {
 	phone := "01512345678"
-	t.Logf("Testing deposit exceeding max capacity on wallet %s", phone)
+	logBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: DEPOSIT up to WalletMax, then DEPOSIT 1000 | expect: second rejected", phone))
+	defer o.report(t)
 
 	// Deposit large amount
 	status, data := deposit(t, phone, walletMaxBalance)
@@ -644,9 +658,9 @@ func TestEdgeCase_DepositExceedsMax(t *testing.T) {
 
 func TestHighConcurrency_50DepositsOnSameWallet(t *testing.T) {
 	phone := "01012345678"
-	t.Logf("Stress testing 50 concurrent deposits for wallet %s", phone)
-
-	initialBal := getWalletBalance(t, phone)
+	initialBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: 50x concurrent DEPOSIT 10 | expect: baseline+successes*10", phone))
+	defer o.report(t)
 
 	var wg sync.WaitGroup
 	var successes, failures int32
@@ -675,7 +689,6 @@ func TestHighConcurrency_50DepositsOnSameWallet(t *testing.T) {
 
 	expectedBal := initialBal + int64(successes)*10
 
-	t.Logf("Stress test done. Successes: %d, Failures: %d", successes, failures)
 	if len(ledgerBalances) > 0 && slices.Max(ledgerBalances) != expectedBal {
 		t.Errorf("Ledger mismatch! Max ledger balance %d != expected %d", slices.Max(ledgerBalances), expectedBal)
 	}
@@ -688,10 +701,12 @@ func TestHighConcurrency_50DepositsOnSameWallet(t *testing.T) {
 // ============================================================================
 
 func TestSetup_CreateTransferWallets(t *testing.T) {
-	t.Log("Setting up wallets for Transfer tests...")
 	createWallet(t, "01055555555", "Transfer Sender", "29905051234567")
 	createWallet(t, "01166666666", "Transfer Receiver", "29906061234567")
-
+	logBalanceBefore(t, "01055555555", "01166666666")
+	o := beginObs(t, "type: SETUP | wallets: 01055555555 (sender), 01166666666 (receiver) | setup: 1x DEPOSIT 50000 to sender")
+	defer o.report(t)
+	
 	// Pre-fund the sender with enough balance for all transfer tests
 	status, data := deposit(t, "01055555555", 50000)
 	if status != http.StatusCreated {
@@ -704,15 +719,15 @@ func TestSetup_CreateTransferWallets(t *testing.T) {
 
 	// Converge before the next test reads the sender balance
 	waitForBalance(t, "01055555555", fundedBal)
-	t.Logf("Transfer wallets created and sender funded with 50000 (ledger balance %d).", fundedBal)
 }
 
 func TestAtomicity_Transfer(t *testing.T) {
 	senderPhone := "01055555555"
 	receiverPhone := "01166666666"
-
-	initialSenderBal := getWalletBalance(t, senderPhone)
-	initialReceiverBal := getWalletBalance(t, receiverPhone)
+	initialSenderBal := mustBalanceBefore(t, senderPhone)
+	initialReceiverBal := mustBalanceBefore(t, receiverPhone)
+	o := beginObs(t, fmt.Sprintf("sender: %s | receiver: %s | ops: 1x TRANSFER 500 | expect: sender -500, receiver +500", senderPhone, receiverPhone))
+	defer o.report(t)
 
 	status, data := transfer(t, senderPhone, receiverPhone, 500)
 	if status != http.StatusCreated {
@@ -726,16 +741,15 @@ func TestAtomicity_Transfer(t *testing.T) {
 
 	waitForBalance(t, senderPhone, initialSenderBal-500)
 	waitForBalance(t, receiverPhone, initialReceiverBal+500)
-	t.Logf("Sender: %d -> %d | Receiver: %d -> %d",
-		initialSenderBal, initialSenderBal-500, initialReceiverBal, initialReceiverBal+500)
 }
 
 func TestConsistency_TransferInsufficientBalance(t *testing.T) {
 	senderPhone := "01055555555"
 	receiverPhone := "01166666666"
-
-	initialSenderBal := getWalletBalance(t, senderPhone)
-	initialReceiverBal := getWalletBalance(t, receiverPhone)
+	initialSenderBal := mustBalanceBefore(t, senderPhone)
+	initialReceiverBal := mustBalanceBefore(t, receiverPhone)
+	o := beginObs(t, fmt.Sprintf("sender: %s | receiver: %s | ops: 1x TRANSFER sender_balance+1000 | expect: rejected, both balances unchanged", senderPhone, receiverPhone))
+	defer o.report(t)
 
 	// Try to transfer more than the sender has
 	status, data := transfer(t, senderPhone, receiverPhone, initialSenderBal+1000)
@@ -752,9 +766,12 @@ func TestConsistency_TransferInsufficientBalance(t *testing.T) {
 func TestConsistency_TransferMaxBalanceFails(t *testing.T) {
 	senderPhone := "01055555555"
 	receiverPhone := "01166666666"
+	currentReceiverBal := mustBalanceBefore(t, receiverPhone)
+	initialSenderBal := mustBalanceBefore(t, senderPhone)
+	o := beginObs(t, fmt.Sprintf("sender: %s | receiver: %s | ops: top-up receiver to WalletMax, 1x TRANSFER 50, withdraw reset | expect: 422, sender unchanged", senderPhone, receiverPhone))
+	defer o.report(t)
 
 	// Top up receiver to max capacity
-	currentReceiverBal := getWalletBalance(t, receiverPhone)
 	amountToMax := walletMaxBalance - currentReceiverBal
 	if amountToMax > 0 {
 		status, data := deposit(t, receiverPhone, amountToMax)
@@ -765,8 +782,6 @@ func TestConsistency_TransferMaxBalanceFails(t *testing.T) {
 			t.Errorf("Receiver ledger balance after top-up: expected %d, got %v", walletMaxBalance, data["balance"])
 		}
 	}
-
-	initialSenderBal := getWalletBalance(t, senderPhone)
 
 	// Attempt transfer that would push receiver over max
 	status, data := transfer(t, senderPhone, receiverPhone, 50)
@@ -795,6 +810,10 @@ func TestConsistency_TransferMaxBalanceFails(t *testing.T) {
 func TestIsolation_ConcurrentTransfers(t *testing.T) {
 	senderPhone := "01055555555"
 	receiverPhone := "01166666666"
+	logBalanceBefore(t, senderPhone)
+	initialReceiverBal := mustBalanceBefore(t, receiverPhone)
+	o := beginObs(t, fmt.Sprintf("sender: %s | receiver: %s | setup: 1x DEPOSIT 5000 | ops: 20x concurrent TRANSFER 50 | expect: sender -successes*50, receiver +successes*50", senderPhone, receiverPhone))
+	defer o.report(t)
 
 	// Top up sender with extra funds for concurrent transfers
 	status, data := deposit(t, senderPhone, 5000)
@@ -805,8 +824,6 @@ func TestIsolation_ConcurrentTransfers(t *testing.T) {
 	if !ok {
 		t.Fatalf("Top-up deposit response missing balance: %v", data)
 	}
-
-	initialReceiverBal := getWalletBalance(t, receiverPhone)
 
 	var wg sync.WaitGroup
 	concurrency := 20
@@ -850,9 +867,10 @@ func TestDurability_IdempotentTransfer(t *testing.T) {
 	senderPhone := "01055555555"
 	receiverPhone := "01166666666"
 	idemKey := fmt.Sprintf("test-idem-transfer-ok-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&reqCounter, 1))
-
-	initialSenderBal := getWalletBalance(t, senderPhone)
-	initialReceiverBal := getWalletBalance(t, receiverPhone)
+	initialSenderBal := mustBalanceBefore(t, senderPhone)
+	initialReceiverBal := mustBalanceBefore(t, receiverPhone)
+	o := beginObs(t, fmt.Sprintf("sender: %s | receiver: %s | ops: 2x TRANSFER 100, same idem-key | expect: 1 POST, same tx_id, -100/+100", senderPhone, receiverPhone))
+	defer o.report(t)
 
 	// First request
 	status1, data1 := transfer(t, senderPhone, receiverPhone, 100, idemKey)
@@ -883,17 +901,18 @@ func TestDurability_IdempotentTransfer(t *testing.T) {
 
 	waitForBalance(t, senderPhone, initialSenderBal-100)
 	waitForBalance(t, receiverPhone, initialReceiverBal+100)
-	t.Logf("Idempotency intact. Sender: %d -> %d | Receiver: %d -> %d",
-		initialSenderBal, initialSenderBal-100, initialReceiverBal, initialReceiverBal+100)
 }
 
 func TestDurability_IdempotentFailedTransfer(t *testing.T) {
 	senderPhone := "01055555555"
 	receiverPhone := "01166666666"
 	idemKey := fmt.Sprintf("test-idem-transfer-fail-%d-%d", time.Now().UnixNano(), atomic.AddInt64(&reqCounter, 1))
+	currentReceiverBal := mustBalanceBefore(t, receiverPhone)
+	initialSenderBal := mustBalanceBefore(t, senderPhone)
+	o := beginObs(t, fmt.Sprintf("sender: %s | receiver: %s | ops: receiver to WalletMax, 2x TRANSFER 50 same idem-key, withdraw reset | expect: 422 twice, same error, balances unchanged", senderPhone, receiverPhone))
+	defer o.report(t)
 
 	// Top up receiver to max
-	currentReceiverBal := getWalletBalance(t, receiverPhone)
 	amountToMax := walletMaxBalance - currentReceiverBal
 	if amountToMax > 0 {
 		status, data := deposit(t, receiverPhone, amountToMax)
@@ -901,8 +920,6 @@ func TestDurability_IdempotentFailedTransfer(t *testing.T) {
 			t.Fatalf("Failed to top up receiver to max! Got status: %d, data: %v", status, data)
 		}
 	}
-
-	initialSenderBal := getWalletBalance(t, senderPhone)
 
 	// First request — should fail with 422
 	status1, data1 := transfer(t, senderPhone, receiverPhone, 50, idemKey)
@@ -943,8 +960,9 @@ func TestDurability_IdempotentFailedTransfer(t *testing.T) {
 
 func TestEdgeCase_TransferToSelf(t *testing.T) {
 	phone := "01055555555"
-
-	initialBal := getWalletBalance(t, phone)
+	initialBal := mustBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | ops: 1x TRANSFER 100 to self | expect: 400, balance unchanged", phone))
+	defer o.report(t)
 
 	status, data := transfer(t, phone, phone, 100)
 	if status != http.StatusBadRequest {
@@ -957,12 +975,15 @@ func TestEdgeCase_TransferToSelf(t *testing.T) {
 
 func TestIsolation_ConcurrentWithdrawalsOnlyOneSucceeds(t *testing.T) {
 	phone := "01027272727"
+	createWallet(t, phone, "Race Withdraw User", "29907071234567")
 	depositAmount := int64(5000)
-	t.Logf("Testing 20 concurrent full-balance withdrawals on wallet %s (only 1 should succeed)", phone)
+	logBalanceBefore(t, phone)
+	o := beginObs(t, fmt.Sprintf("wallet: %s | setup: 1x DEPOSIT %d + converge | ops: 20x concurrent WITHDRAW full balance | expect: exactly 1 ok, 19 failed, wallet -> 0", phone, depositAmount))
+	defer o.report(t)
 
 	// Create a fresh wallet for this test (no-op if it already exists —
 	// residual balance from a previous run is handled below).
-	createWallet(t, phone, "Race Withdraw User", "29907071234567")
+	
 
 	// Fund the wallet. The deposit response reports the full ledger
 	// balance — including any residual balance from previous runs.
@@ -981,13 +1002,8 @@ func TestIsolation_ConcurrentWithdrawalsOnlyOneSucceeds(t *testing.T) {
 	// and withdrawing it would let more than one withdrawal succeed.
 	waitForBalance(t, phone, fundedBal)
 
-	// Read the wallet balance dynamically — this is the amount all 20
-	// goroutines will race to withdraw.
-	walletBal := getWalletBalance(t, phone)
-	if walletBal != fundedBal {
-		t.Fatalf("Wallet balance %d diverged from ledger %d after convergence", walletBal, fundedBal)
-	}
-
+	// waitForBalance guarantees the wallet now equals fundedBal — that is
+	// the amount all 20 goroutines race to withdraw.
 	var wg sync.WaitGroup
 	var successes, failures int32
 	concurrency := 20
@@ -999,7 +1015,7 @@ func TestIsolation_ConcurrentWithdrawalsOnlyOneSucceeds(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s, d := withdraw(t, phone, walletBal)
+			s, d := withdraw(t, phone, fundedBal)
 			if s == http.StatusCreated {
 				atomic.AddInt32(&successes, 1)
 				if b, ok := responseInt64(d, "balance"); ok {

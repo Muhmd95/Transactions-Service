@@ -39,6 +39,34 @@ The tests are behind the `//go:build integration` build tag. CI (`.github/workfl
 
 **Concurrent helper safety:** `deposit` / `withdraw` / `transfer` use `t.Errorf` (never `t.Fatalf`) so they are safe to call from goroutines in the concurrency tests. `t.Fatalf` is reserved for the main test goroutine.
 
+## Observation Windows
+
+Each test prints a window around its own logs (implementation: `tests/observation.go`). Immediately **before** the window opens, the test logs the starting balance of the wallet(s) under test (`balance_before`), read from the Wallet Service — no balance reads happen inside the request window (the only reads during a test are `waitForBalance`'s convergence polls). The banner shows the test's properties; the closing summary shows the request window (first request sent -> last response received), a status histogram, a slow-request count, burst throughput, and CDC convergence timings. Visible with `-v`.
+
+```
+ balance_before : 01012345678 = 7400
+================ [TestIsolation_ConcurrentDepositsOnSameWallet] ================
+ wallet: 01012345678 | ops: 20x concurrent DEPOSIT 100 | started: 14:03:22.150
+--------------------------------------------------------------------------------
+ window     : 14:03:22.150 -> 14:03:23.310 (1.16s)
+ requests   : 20 total | 20 ok | 0 failed [201:20]
+ slow       : 3 requests >250ms
+ throughput : 17.2 ok/s
+ cdc        : 01012345678 -> 9400 in 2.4s
+================================================================================ (finished: 14:03:26.100, total 4.1s)
+```
+
+| Field | Meaning | What to look for |
+|---|---|---|
+| `balance_before` | Wallet Service read(s) taken before the observation opens — equals the ledger at test start, since the previous test's convergence guaranteed a fresh projection. `?` = wallet doesn't exist yet (clean DB). Tests that need the value use it as their baseline instead of reading again inside the window | Starting point for the deltas below |
+| banner props | Test parameters (wallet, ops, expectation) | Context for the numbers below |
+| `window` | First request sent → last response received — the pure burst, excluding setup reads and convergence waits | Grows superlinearly with concurrency → contention |
+| `requests` | Status histogram of deposit/withdraw/transfer calls. `201` posted, `400` validation reject, `422` business reject (insufficient balance / max capacity), `429` **OCC retry exhaustion** (`ErrHighFrequencyTransaction`: 100 seq-number retries burned) | Any `429` in deposit/concurrency tests = wallet too hot. Note some tests *expect* failures (edge cases, race test: 1 ok / 19 failed is correct) |
+| `slow` | Requests with round-trip >250ms. Normal is ~10-50ms; above 250ms almost always means server-side OCC retries (each sleeps a random 5-100ms jitter) | Many slow + 0 failed = retry storm that eventually succeeded; latency suffered |
+| `throughput` | ok requests/second across the window | Compare the 20-deposit vs 50-deposit tests: throughput *dropping* at higher concurrency = thrashing, not scaling |
+| `cdc` | Time from `waitForBalance` start until the wallet projection matched the ledger — end-to-end pipeline lag (change stream → Kafka Connect → wallet consumer) | >10s or growing across runs = pipeline degradation. `TIMEOUT` = convergence failed (test also fails) |
+| `started`/`finished` | Wall-clock test start/end, total includes convergence waits | Distinguishes burst time (`window`) from full test time |
+
 ## Test Scenarios Overview
 
 | Test Name | Concurrency | Purpose |
