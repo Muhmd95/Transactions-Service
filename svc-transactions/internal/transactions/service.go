@@ -160,7 +160,7 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 			// try again and fetch the latest transaction
 			// sleep so dont collide at the same time
 			// can be caused by refID so i put a check in the start of the iteration
-			randomDelay := 5 + rand.Intn(96)
+			randomDelay := rand.Intn(31)
 			duration := time.Duration(randomDelay) * time.Millisecond
 			time.Sleep(duration)
 			continue
@@ -346,7 +346,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 			// some other concurrent request add this transaction first
 			// try again and fetch the latest transaction
 			// sleep so dont collide at the same time
-			randomDelay := 5 + rand.Intn(96)
+			randomDelay := rand.Intn(31)
 			duration := time.Duration(randomDelay) * time.Millisecond
 			time.Sleep(duration)
 			continue
@@ -635,7 +635,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 			// some other concurrent request add this transaction first
 			// try again and fetch the latest transaction
 			// sleep so dont collide at the same time
-			randomDelay := 5 + rand.Intn(96)
+			randomDelay := rand.Intn(31)
 			duration := time.Duration(randomDelay) * time.Millisecond
 			time.Sleep(duration)
 			continue
@@ -693,7 +693,7 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 				// some other concurrent request add this transaction first
 				// try again and fetch the latest transaction
 				// sleep so dont collide at the same time
-				randomDelay := 5 + rand.Intn(96)
+				randomDelay := rand.Intn(31)
 				duration := time.Duration(randomDelay) * time.Millisecond
 				time.Sleep(duration)
 				continue
