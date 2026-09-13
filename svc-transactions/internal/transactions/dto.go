@@ -67,8 +67,9 @@ type WalletErrorResponse struct {
 }
 
 type GetWalletResponse struct {
-	WalletID  string
-	OwnerName string
+	WalletID  	string
+	OwnerName 	string
+	Balance 	int64
 }
 
 // notifications client dtos phase 3

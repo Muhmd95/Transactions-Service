@@ -99,8 +99,9 @@ func (g *grpcClient) GetWalletInfo(ctx context.Context, PhoneNumber string) (*tr
 	}
 
 	return &transactions.GetWalletResponse{
-		WalletID:  clientRes.WalletId,
-		OwnerName: clientRes.OwnerName,
+		WalletID:  	clientRes.WalletId,
+		OwnerName: 	clientRes.OwnerName,
+		Balance: 	clientRes.Balance,
 	}, nil
 
 }
