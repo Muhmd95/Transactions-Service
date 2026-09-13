@@ -40,15 +40,16 @@ func NewService(repo Repository, walletClient WalletClient, txManager TxManager)
 func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequest, refID string) (*DepositResponse, error) {
 	log := logger.Ctx(ctx)
 
-	processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, nil)
+	processedTX, latestTX, err := s.repo.EarlyCheck(ctx, refID, req.PhoneNumber)
 	if err != nil {
-		if errors.Is(err, ErrTransactionNotFound) {
+		if errors.Is(err, ErrFirstTransaction) {
 			// continue the transaction
 		} else {
-			log.Error().Err(err).Str("reference_id", refID).Msg("couldn't fetch the transaction by reference id (service layer)")
+			log.Error().Err(err).Str("reference_id", refID).Msg("couldn't check transaction (service layer)")
 			return nil, err
 		}
-	} else {
+	} 
+	if processedTX != nil {
 		return &DepositResponse{
 			TransactionID: processedTX.ID,
 			WalletID:      processedTX.WalletID,
@@ -59,14 +60,6 @@ func (s *Service) CreateDepositTransaction(ctx context.Context, req *DepositRequ
 	}
 
 	maxRetries := 100
-
-	latestTX, err := s.repo.GetLatestTransaction(ctx, req.PhoneNumber)
-	if err != nil {
-		if errors.Is(err, ErrFirstTransaction) {
-		} else {
-			return nil, err
-		}
-	}
 
 	var walletID string = ""
 	if latestTX == nil {
@@ -229,15 +222,16 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 	maxRetries := 100
 	log := logger.Ctx(ctx)
 
-	processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, nil)
+	processedTX, latestTX, err := s.repo.EarlyCheck(ctx, refID, req.PhoneNumber)
 	if err != nil {
-		if errors.Is(err, ErrTransactionNotFound) {
+		if errors.Is(err, ErrFirstTransaction) {
 			// continue the transaction
 		} else {
-			log.Error().Err(err).Str("reference_id", refID).Msg("couldn't fetch the transaction by reference id (service layer)")
+			log.Error().Err(err).Str("reference_id", refID).Msg("couldn't check transaction (service layer)")
 			return nil, err
 		}
-	} else {
+	} 
+	if processedTX != nil {
 		return &WithdrawalResponse{
 			TransactionID: processedTX.ID,
 			WalletID:      processedTX.WalletID,
@@ -246,16 +240,7 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 			Status:        string(processedTX.Status),
 		}, nil
 	}
-
-	latestTX, err := s.repo.GetLatestTransaction(ctx, req.PhoneNumber)
-	if err != nil {
-		if errors.Is(err, ErrFirstTransaction) {
-			// continue the action
-		} else {
-			return nil, err
-		}
-	}
-
+	
 	var walletID string = ""
 	if latestTX == nil {
 		// check if the wallet exists from the wallet service
@@ -438,16 +423,21 @@ func (s *Service) CreateWithdrawalTransaction(ctx context.Context, req *Withdraw
 func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRequest, refID string) (*TransferResponse, error) {
 	maxRetries := 100
 	log := logger.Ctx(ctx)
+	if req.SenderPhoneNumber == req.ReceiverPhoneNumber {
+		log.Warn().Str("phone_number", req.SenderPhoneNumber).Msg("Sender and receiver phone numbers are the same")
+		return nil, ErrInvalidTransactionStatus
+	}
 
-	processedTX, err := s.repo.GetTransactionByReferenceID(ctx, refID, &req.SenderPhoneNumber)
+	processedTX, latestSenderTX, err := s.repo.EarlyCheck(ctx, refID, req.SenderPhoneNumber)
 	if err != nil {
-		if errors.Is(err, ErrTransactionNotFound) {
+		if errors.Is(err, ErrFirstTransaction) {
 			// continue the transaction
 		} else {
-			log.Error().Err(err).Str("reference_id", refID).Msg("couldn't check the transaction by reference id (service layer)")
+			log.Error().Err(err).Str("reference_id", refID).Msg("couldn't check transaction (service layer)")
 			return nil, err
 		}
-	} else {
+	} 
+	if processedTX != nil {
 		if processedTX.Status != StatusCompleted {
 			log.Error().Str("reference_id", refID).Msg("Transaction status is not completed, something went wrong")
 			return nil, ErrHalfTransferFail
@@ -460,24 +450,14 @@ func (s *Service) CreateTransferTransaction(ctx context.Context, req *TransferRe
 			SenderBalanceBefore: processedTX.BalanceBefore,
 		}, nil
 	}
-
-	if req.SenderPhoneNumber == req.ReceiverPhoneNumber {
-		log.Warn().Str("phone_number", req.SenderPhoneNumber).Msg("Sender and receiver phone numbers are the same")
-		return nil, ErrInvalidTransactionStatus
-	}
+	
 
 	var senderWalletID string = ""
-	latestSenderTX, err := s.repo.GetLatestTransaction(ctx, req.SenderPhoneNumber)
-	if err != nil {
-		if errors.Is(err, ErrFirstTransaction) {
-			// the first transaction of the sender cant be transfer because his init balance is 0
-			log.Warn().Msg("First transaction of the sender cant be transfer because his init balance is 0")
-			return nil, ErrInsufficientBalance
-		}
-		log.Error().Err(err).Msg("couldn't fetch the latest transaction of the sender")
-		return nil, err
+	if latestSenderTX == nil {
+		// the first transaction of the sender cant be transfer because his init balance is 0
+		log.Warn().Msg("First transaction of the sender cant be transfer because his init balance is 0")
+		return nil, ErrInsufficientBalance
 	}
-
 	senderWalletID = latestSenderTX.WalletID
 
 	latestReceiverTX, err := s.repo.GetLatestTransaction(ctx, req.ReceiverPhoneNumber)

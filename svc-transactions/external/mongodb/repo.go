@@ -99,20 +99,38 @@ func (r *mongoRepository) CreateCoupledTransaction(ctx context.Context, deposit 
 }
 
 func (r *mongoRepository) GetLatestTransaction(ctx context.Context, PhoneNumber string) (*transactions.Transaction, error) {
-	var latestTX transactions.Transaction
+	// Only fetch fields the service actually uses
+	projection := bson.M{
+		"sequence_number": 1,
+		"balance_after":   1,
+		"wallet_id":       1,
+		"_id":             1,
+	}
 
-	filter := bson.M{"phone_number": PhoneNumber}
+	option := options.FindOne().
+		SetSort(bson.D{{Key: "sequence_number", Value: -1}}).
+		SetProjection(projection)
 
-	option := options.FindOne().SetSort(bson.D{{Key: "sequence_number", Value: -1}})
+	var latestTX struct {
+		ID           primitive.ObjectID `bson:"_id"`
+		SeqNumber    int64              `bson:"sequence_number"`
+		BalanceAfter int64              `bson:"balance_after"`
+		WalletID     string             `bson:"wallet_id"`
+	}
 
-	err := r.collection.FindOne(ctx, filter, option).Decode(&latestTX)
+	err := r.collection.FindOne(ctx, bson.M{"phone_number": PhoneNumber}, option).Decode(&latestTX)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, transactions.ErrFirstTransaction
 		}
 		return nil, err
 	}
-	return &latestTX, nil
+	return &transactions.Transaction{
+		ID:           latestTX.ID,
+		SeqNumber:    latestTX.SeqNumber,
+		BalanceAfter: latestTX.BalanceAfter,
+		WalletID:     latestTX.WalletID,
+	}, nil
 }
 
 func (r *mongoRepository) GetTransactionByReferenceID(ctx context.Context, referenceID string, optionalPhoneNNumber *string) (*transactions.Transaction, error) {
@@ -132,6 +150,65 @@ func (r *mongoRepository) GetTransactionByReferenceID(ctx context.Context, refer
 		return nil, err
 	}
 	return &transaction, nil
+}
+
+func (r *mongoRepository) EarlyCheck(ctx context.Context, refID, phone string) (*transactions.Transaction, *transactions.Transaction, error) {
+	log := logger.Ctx(ctx)
+	pipeline := mongo.Pipeline{
+		{{Key: "$facet", Value: bson.D{
+			// Sub-pipeline 1: idempotency check by reference_id
+			{Key: "byRef", Value: bson.A{
+				bson.D{{Key: "$match", Value: bson.M{
+					"reference_id": refID,
+					"phone_number": phone, // covers unique index fully
+				}}},
+				bson.D{{Key: "$limit", Value: 1}},
+				bson.D{{Key: "$project", Value: bson.M{
+					"_id": 1, "wallet_id": 1,
+					"balance_after": 1, "balance_before": 1,
+					"status": 1, "reference_id": 1,
+					"created_at": 1, "type": 1,
+				}}},
+			}},
+
+			// Sub-pipeline 2: latest transaction by sequence
+			{Key: "latest", Value: bson.A{
+				bson.D{{Key: "$match", Value: bson.M{"phone_number": phone}}},
+				bson.D{{Key: "$sort", Value: bson.D{{Key: "sequence_number", Value: -1}}}},
+				bson.D{{Key: "$limit", Value: 1}},
+				bson.D{{Key: "$project", Value: bson.M{
+					"_id": 1, "wallet_id": 1,
+				}}},
+			}},
+		}}},
+	}
+
+	cursor, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute aggregation pipeline (from repo layer)")
+		return nil, nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var result struct {
+		ByRef  []transactions.Transaction `bson:"byRef"`
+		Latest []transactions.Transaction `bson:"latest"`
+	}
+	if !cursor.Next(ctx) {
+		return nil, nil, errors.New("no aggregation result")
+	}
+	if err := cursor.Decode(&result); err != nil {
+		log.Error().Err(err).Msg("Failed to decode aggregation result (from repo layer)")
+		return nil, nil, err
+	}
+
+	if len(result.ByRef) > 0 {
+		return &result.ByRef[0], nil, nil // idempotent hit
+	}
+	if len(result.Latest) > 0 {
+		return nil, &result.Latest[0], nil // latest for seq/balance
+	}
+	return nil, nil, transactions.ErrFirstTransaction
 }
 
 // func (r *mongoRepository) UpdateTransactionStatus(ctx context.Context, transactionID primitive.ObjectID, status transactions.TransactionStatus, failedReason string) error {
