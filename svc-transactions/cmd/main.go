@@ -29,7 +29,8 @@ func main() {
 	logger.Log.Info().Msg("Starting svc-transactions")
 
 	// init rhe tracer
-	tp, err := tracer.InitTracer("svc-transactions")
+	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	tp, err := tracer.InitTracer("svc-transactions", otlpEndpoint)
 	if err != nil {
 		logger.Log.Fatal().Err(err).Msg("Failed to initialize the tracer")
 
@@ -153,7 +154,7 @@ func main() {
 	// start the http server
 	server := &http.Server{
 		Addr:    ":" + port,
-		Handler: mux,
+		Handler: rest.RequestLogger(rest.MetricsMiddleware(mux)),
 	}
 	// 1. Run the server in a goroutine
 	go func() {

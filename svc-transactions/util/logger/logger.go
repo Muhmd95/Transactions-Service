@@ -12,28 +12,44 @@ import (
 var Log zerolog.Logger
 
 func InitLogger(serviceName string) {
-	// console writer for human-readable output
-	consoleWriter := zerolog.ConsoleWriter{
-		Out:        os.Stdout,
-		TimeFormat: "2006-01-02 15:04:05",
+	env := os.Getenv("APP_ENV") // "development" | "production"
+
+	var log zerolog.Logger
+
+	if env == "production" {
+		// Production: JSON output, INFO level, no color
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		log = zerolog.New(os.Stdout).
+			With().
+			Timestamp().
+			Str("service", serviceName).
+			Logger()
+	} else {
+		// Development: pretty console, DEBUG level
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		consoleWriter := zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: "2006-01-02 15:04:05",
+		}
+		log = zerolog.New(consoleWriter).
+			With().
+			Timestamp().
+			Str("service", serviceName).
+			Logger()
 	}
 
-	// creae the logger instance with the console writer and timestamp
-	Log = zerolog.New(consoleWriter).With().Timestamp().Str("service", serviceName).Logger()
+	Log = log
 }
 
 // Ctx extracts the OpenTelemetry Trace ID from the context and attaches it to the logger.
-// this is for the handlers to know which req is beaing processed by its trace id and span id
-
+// This correlates logs with Jaeger traces for end-to-end request debugging.
 func Ctx(ctx context.Context) zerolog.Logger {
-	spanContext := trace.SpanFromContext(ctx).SpanContext() // pass the contetx of the req
+	spanContext := trace.SpanFromContext(ctx).SpanContext()
 
-	// If the context doesn't have an active trace, just return the standard logger
 	if !spanContext.IsValid() {
 		return Log
 	}
 
-	// Attach both the Trace ID (the full request journey) and Span ID (this specific service's step)
 	return Log.With().
 		Str("trace_id", spanContext.TraceID().String()).
 		Str("span_id", spanContext.SpanID().String()).
